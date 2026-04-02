@@ -8,9 +8,9 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
+      font-family: -apple-system, system-ui, BlinkMacSystemFont, sans-serif;
+      background: #f5f5f5;
+      color: #1a1a1a;
       min-height: 100vh;
       display: flex;
       align-items: center;
@@ -18,93 +18,80 @@
     }
 
     .login-card {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 16px;
-      padding: 2.5rem;
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 2rem;
       width: 100%;
-      max-width: 400px;
-      text-align: center;
+      max-width: 340px;
     }
 
     .login-card h1 {
-      font-size: 1.5rem;
-      color: #38bdf8;
-      margin-bottom: 0.3rem;
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0.2rem;
     }
 
     .login-card p {
-      color: #94a3b8;
-      font-size: 0.9rem;
-      margin-bottom: 2rem;
+      color: #888;
+      font-size: 0.8rem;
+      margin-bottom: 1.5rem;
     }
 
     .form-group {
-      margin-bottom: 1rem;
-      text-align: left;
+      margin-bottom: 0.85rem;
     }
 
     .form-group label {
       display: block;
-      font-size: 0.85rem;
-      color: #94a3b8;
-      margin-bottom: 0.4rem;
+      font-size: 0.8rem;
+      color: #666;
+      margin-bottom: 0.25rem;
     }
 
     .form-group input {
       width: 100%;
-      padding: 0.7rem 1rem;
-      border-radius: 8px;
-      border: 1px solid #334155;
-      background: #0f172a;
-      color: #e2e8f0;
-      font-size: 1rem;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid #d1d1d1;
+      border-radius: 5px;
+      font-size: 0.95rem;
       outline: none;
-      transition: border-color 0.2s;
+      color: #1a1a1a;
     }
 
-    .form-group input:focus {
-      border-color: #38bdf8;
-    }
+    .form-group input:focus { border-color: #0066cc; }
 
     button[type="submit"] {
       width: 100%;
-      padding: 0.75rem;
+      padding: 0.6rem;
       border: none;
-      border-radius: 8px;
-      background: #38bdf8;
-      color: #0f172a;
-      font-size: 1rem;
+      border-radius: 5px;
+      background: #1a1a1a;
+      color: #fff;
+      font-size: 0.9rem;
       font-weight: 600;
       cursor: pointer;
-      margin-top: 0.5rem;
-      transition: background 0.2s;
+      margin-top: 0.25rem;
     }
 
-    button[type="submit"]:hover {
-      background: #7dd3fc;
-    }
-
-    button[type="submit"]:disabled {
-      background: #475569;
-      cursor: not-allowed;
-    }
+    button[type="submit"]:hover { background: #333; }
+    button[type="submit"]:disabled { background: #ccc; cursor: not-allowed; }
 
     .error-msg {
-      color: #f87171;
-      font-size: 0.85rem;
-      margin-top: 1rem;
-      min-height: 1.2em;
+      color: #c62828;
+      font-size: 0.8rem;
+      margin-top: 0.75rem;
+      min-height: 1.1em;
     }
   </style>
 </head>
 <body>
   <form class="login-card" id="login-form">
     <h1>Magasin TGE</h1>
-    <p>Assistant vocal d'inventaire</p>
+    <p>Administration</p>
 
     <div class="form-group">
-      <label for="username">Nom d'utilisateur</label>
+      <label for="username">Utilisateur</label>
       <input type="text" id="username" name="username" required autocomplete="username" autofocus>
     </div>
 
@@ -113,7 +100,7 @@
       <input type="password" id="password" name="password" required autocomplete="current-password">
     </div>
 
-    <button type="submit">Se connecter</button>
+    <button type="submit">Connexion</button>
     <div class="error-msg" id="error"></div>
   </form>
 
@@ -137,16 +124,16 @@
         });
 
         if (res.ok) {
-          window.location.href = "/";
+          window.location.href = "/admin";
         } else {
-          errorEl.textContent = "Nom d'utilisateur ou mot de passe invalide.";
+          errorEl.textContent = "Identifiants invalides.";
         }
       } catch {
-        errorEl.textContent = "Erreur de connexion au serveur.";
+        errorEl.textContent = "Erreur de connexion.";
       }
 
       btn.disabled = false;
-      btn.textContent = "Se connecter";
+      btn.textContent = "Connexion";
     });
   </script>
 </body>

@@ -1,0 +1,15 @@
+{
+  "name": "magasin-tge-print-client",
+  "version": "1.0.0",
+  "description": "Client d'impression thermique pour Raspberry Pi",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "escpos": "^3.0.0-alpha.6",
+    "escpos-usb": "^3.0.0-alpha.4",
+    "eventsource": "^2.0.2",
+    "dotenv": "^16.4.5"
+  }
+}

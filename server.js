@@ -4,6 +4,7 @@ const session = require("express-session");
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const Database = require("better-sqlite3");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -60,12 +61,10 @@ app.post("/api/logout", (req, res) => {
   res.json({ success: true });
 });
 
-// ── Protected static files (except login.html) ──
-app.get("/", requireAuth, (req, res) => {
+// ── Static files ──
+app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
-
-app.use("/app.js", requireAuth, express.static(path.join(__dirname, "public", "app.js")));
 
 // Serve login.html assets without auth
 app.use(express.static("public", { index: false }));
@@ -206,8 +205,8 @@ Après avoir vu les résultats:
 
 Tu parles en français québécois naturel. Sois bref dans tes réponses.`;
 
-// ── Search API (for voice mode) ──
-app.post("/api/search", requireAuth, async (req, res) => {
+// ── Search API (public — students don't need auth) ──
+app.post("/api/search", async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.status(400).json({ error: "Query requis" });
@@ -259,6 +258,220 @@ app.post("/api/chat", requireAuth, async (req, res) => {
     console.error("Chat failed:", err);
     res.status(500).json({ error: "Erreur serveur" });
   }
+});
+
+// ── SQLite: Orders queue ──
+const db = new Database(path.join(__dirname, "magasin.db"));
+db.pragma("journal_mode = WAL");
+db.pragma("foreign_keys = ON");
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_number TEXT UNIQUE NOT NULL,
+    student_da TEXT NOT NULL,
+    student_name TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS order_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
+    article_no TEXT NOT NULL,
+    description TEXT NOT NULL,
+    quantity INTEGER DEFAULT 1,
+    prix TEXT,
+    localisation TEXT
+  );
+`);
+
+// ── SSE: connected clients ──
+const sseClients = new Set(); // { res, da? } — da is set for students, null for admin
+
+function broadcastSSE(event, data) {
+  const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const client of sseClients) {
+    client.res.write(msg);
+  }
+}
+
+function generateOrderNumber() {
+  const today = new Date().toISOString().slice(0, 10);
+  const row = db.prepare(
+    "SELECT COUNT(*) as cnt FROM orders WHERE date(created_at) = ?"
+  ).get(today);
+  return String((row?.cnt || 0) + 1).padStart(3, "0");
+}
+
+// ── SSE endpoints (must be before :number param routes) ──
+app.get("/api/orders/stream", (req, res) => {
+  const da = req.query.da;
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  });
+  res.write("event: connected\ndata: {}\n\n");
+
+  const client = { res, da: da || null };
+  sseClients.add(client);
+
+  req.on("close", () => { sseClients.delete(client); });
+});
+
+app.get("/api/admin/orders/stream", requireAuth, (req, res) => {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  });
+  res.write("event: connected\ndata: {}\n\n");
+
+  const client = { res, da: null };
+  sseClients.add(client);
+
+  req.on("close", () => { sseClients.delete(client); });
+});
+
+// ── Order routes (no auth — students) ──
+app.post("/api/orders", (req, res) => {
+  const { student_da, student_name, items } = req.body;
+  if (!student_da || !student_name || !items?.length) {
+    return res.status(400).json({ error: "DA, nom et articles requis" });
+  }
+
+  const orderNumber = generateOrderNumber();
+  const insert = db.prepare(
+    "INSERT INTO orders (order_number, student_da, student_name) VALUES (?, ?, ?)"
+  );
+  const insertItem = db.prepare(
+    "INSERT INTO order_items (order_id, article_no, description, quantity, prix, localisation) VALUES (?, ?, ?, ?, ?, ?)"
+  );
+
+  const tx = db.transaction(() => {
+    const result = insert.run(orderNumber, student_da.trim(), student_name.trim());
+    const orderId = result.lastInsertRowid;
+    for (const item of items) {
+      insertItem.run(orderId, item.article_no, item.description, item.quantity || 1, item.prix || "0", item.localisation || "");
+    }
+    return orderId;
+  });
+
+  try {
+    tx();
+    broadcastSSE("order-new", {
+      order_number: orderNumber,
+      student_da: student_da.trim(),
+      student_name: student_name.trim(),
+      items: items.map((i) => ({ article_no: i.article_no, description: i.description, quantity: i.quantity || 1, prix: i.prix || "0" })),
+    });
+    res.json({ order_number: orderNumber });
+  } catch (err) {
+    console.error("Order creation failed:", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+app.get("/api/orders/:number", (req, res) => {
+  const order = db.prepare(
+    "SELECT * FROM orders WHERE order_number = ?"
+  ).get(req.params.number);
+  if (!order) return res.status(404).json({ error: "Commande introuvable" });
+
+  const items = db.prepare(
+    "SELECT * FROM order_items WHERE order_id = ?"
+  ).all(order.id);
+
+  res.json({ ...order, items });
+});
+
+app.delete("/api/orders/:number", (req, res) => {
+  const order = db.prepare(
+    "SELECT * FROM orders WHERE order_number = ?"
+  ).get(req.params.number);
+  if (!order) return res.status(404).json({ error: "Commande introuvable" });
+  if (order.status !== "pending") {
+    return res.status(400).json({ error: "Impossible d'annuler, la commande est déjà en traitement" });
+  }
+  db.prepare("UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(order.id);
+  broadcastSSE("order-update", { order_number: order.order_number, status: "cancelled", student_da: order.student_da });
+  res.json({ success: true });
+});
+
+// ── Print client acknowledgment ──
+const PRINT_TOKEN = process.env.PRINT_TOKEN || "";
+
+function requirePrintToken(req, res, next) {
+  if (!PRINT_TOKEN) return res.status(503).json({ error: "Impression non configurée" });
+  const auth = req.headers.authorization;
+  if (auth === `Bearer ${PRINT_TOKEN}`) return next();
+  return res.status(401).json({ error: "Token invalide" });
+}
+
+app.post("/api/print-ack/:number", requirePrintToken, (req, res) => {
+  const order = db.prepare("SELECT * FROM orders WHERE order_number = ?").get(req.params.number);
+  if (!order) return res.status(404).json({ error: "Commande introuvable" });
+  if (order.status !== "pending") return res.json({ success: true, already: true });
+
+  db.prepare("UPDATE orders SET status = 'preparing', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(order.id);
+  broadcastSSE("order-update", { order_number: order.order_number, status: "preparing", student_da: order.student_da });
+  console.log(`Print-ack: #${order.order_number} → preparing`);
+  res.json({ success: true });
+});
+
+// ── Admin order routes (auth required) ──
+app.get("/admin", requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "admin.html"));
+});
+
+app.use("/admin.js", requireAuth, express.static(path.join(__dirname, "public", "admin.js")));
+
+app.get("/api/admin/orders", requireAuth, (req, res) => {
+  const orders = db.prepare(
+    "SELECT * FROM orders WHERE status NOT IN ('picked_up', 'cancelled') ORDER BY created_at ASC"
+  ).all();
+
+  for (const order of orders) {
+    order.items = db.prepare(
+      "SELECT * FROM order_items WHERE order_id = ?"
+    ).all(order.id);
+  }
+
+  res.json(orders);
+});
+
+app.get("/api/admin/orders/all", requireAuth, (req, res) => {
+  const orders = db.prepare(
+    "SELECT * FROM orders ORDER BY created_at DESC LIMIT 100"
+  ).all();
+
+  for (const order of orders) {
+    order.items = db.prepare(
+      "SELECT * FROM order_items WHERE order_id = ?"
+    ).all(order.id);
+  }
+
+  res.json(orders);
+});
+
+app.patch("/api/admin/orders/:id", requireAuth, (req, res) => {
+  const { status } = req.body;
+  const validStatuses = ["pending", "preparing", "ready", "picked_up", "cancelled"];
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ error: "Statut invalide" });
+  }
+
+  // Get order info before update for broadcast
+  const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(req.params.id);
+  if (!order) return res.status(404).json({ error: "Commande introuvable" });
+
+  db.prepare(
+    "UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+  ).run(status, req.params.id);
+
+  broadcastSSE("order-update", { order_number: order.order_number, status, student_da: order.student_da });
+  res.json({ success: true });
 });
 
 app.post("/api/session", requireAuth, async (req, res) => {
