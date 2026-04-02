@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Magasin TGE - Assistant Vocal</title>
+  <title>Magasin TGE - Inventaire</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -12,25 +12,65 @@
       background: #0f172a;
       color: #e2e8f0;
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
     }
 
+    /* ── Header with search ── */
     header {
       width: 100%;
-      padding: 1.5rem 2rem;
+      padding: 1rem 2rem;
       background: #1e293b;
       border-bottom: 1px solid #334155;
       display: flex;
       align-items: center;
-      justify-content: center;
+      gap: 1.5rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    header h1 {
+      font-size: 1.2rem;
+      color: #38bdf8;
+      white-space: nowrap;
+    }
+
+    #search-bar {
+      flex: 1;
+      max-width: 600px;
       position: relative;
     }
 
-    #logout-btn {
+    #search-bar svg {
       position: absolute;
-      right: 2rem;
+      left: 0.85rem;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 20px;
+      height: 20px;
+      fill: #64748b;
+      pointer-events: none;
+    }
+
+    #search-input {
+      width: 100%;
+      padding: 0.65rem 1rem 0.65rem 2.75rem;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    #search-input:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+    }
+
+    #search-input::placeholder { color: #475569; }
+
+    #logout-btn {
       padding: 0.4rem 1rem;
       border-radius: 6px;
       border: 1px solid #475569;
@@ -39,6 +79,8 @@
       font-size: 0.8rem;
       cursor: pointer;
       transition: all 0.2s;
+      white-space: nowrap;
+      margin-left: auto;
     }
 
     #logout-btn:hover {
@@ -46,44 +88,123 @@
       color: #f87171;
     }
 
-    header h1 {
-      font-size: 1.5rem;
-      color: #38bdf8;
-    }
-
-    header p {
-      color: #94a3b8;
-      font-size: 0.9rem;
-      margin-top: 0.3rem;
-    }
-
+    /* ── Main content ── */
     main {
-      width: 100%;
-      max-width: 1000px;
-      padding: 2rem;
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 1.5rem;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.5rem 2rem 6rem;
     }
 
-    /* Mic button */
+    #result-count {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin-bottom: 1rem;
+    }
+
+    #empty-state {
+      text-align: center;
+      padding: 4rem 1rem;
+      color: #475569;
+    }
+
+    #empty-state svg {
+      width: 64px;
+      height: 64px;
+      fill: #334155;
+      margin-bottom: 1rem;
+    }
+
+    #empty-state p {
+      font-size: 1.1rem;
+    }
+
+    #empty-state .hint {
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+      color: #3b4d63;
+    }
+
+    /* ── Results grid ── */
+    #results {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .item-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      transition: border-color 0.2s;
+      animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .item-card:hover { border-color: #38bdf8; }
+
+    .item-card .article-no {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #38bdf8;
+      margin-bottom: 0.2rem;
+    }
+
+    .item-card .description {
+      font-size: 0.95rem;
+      color: #e2e8f0;
+      margin-bottom: 0.5rem;
+    }
+
+    .item-card .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+    }
+
+    .item-card .meta span {
+      background: #0f172a;
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+      color: #94a3b8;
+    }
+
+    .item-card .meta span strong { color: #cbd5e1; }
+
+    .item-card .meta .out-of-stock { color: #f87171; }
+    .item-card .meta .out-of-stock strong { color: #f87171; }
+
+    /* ── Floating mic button ── */
+    #voice-fab {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      z-index: 200;
+    }
+
     #mic-btn {
-      width: 120px;
-      height: 120px;
+      width: 64px;
+      height: 64px;
       border-radius: 50%;
-      border: 3px solid #334155;
+      border: 2px solid #334155;
       background: #1e293b;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       transition: all 0.3s ease;
-      position: relative;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
     }
 
-    #mic-btn:hover { border-color: #38bdf8; }
+    #mic-btn:hover {
+      border-color: #38bdf8;
+      transform: scale(1.05);
+    }
 
     #mic-btn.active {
       border-color: #22c55e;
@@ -99,38 +220,53 @@
     }
 
     #mic-btn svg {
-      width: 48px;
-      height: 48px;
+      width: 28px;
+      height: 28px;
       fill: #94a3b8;
       transition: fill 0.3s;
     }
 
-    #status {
-      font-size: 0.95rem;
-      color: #94a3b8;
-      min-height: 1.5em;
-    }
-
-    #status.error { color: #f87171; }
-    #status.connected { color: #22c55e; }
-
-    /* Transcript */
-    #transcript {
-      width: 100%;
+    /* ── Voice panel (opens above the FAB) ── */
+    #voice-panel {
+      position: absolute;
+      bottom: 76px;
+      right: 0;
+      width: 340px;
       background: #1e293b;
       border: 1px solid #334155;
-      border-radius: 12px;
-      padding: 1rem 1.25rem;
-      min-height: 60px;
-      max-height: 150px;
+      border-radius: 14px;
+      padding: 1.25rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      display: none;
+    }
+
+    #voice-panel.open { display: block; }
+
+    #voice-panel #status {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      text-align: center;
+      margin-bottom: 0.75rem;
+    }
+
+    #voice-panel #status.error { color: #f87171; }
+    #voice-panel #status.connected { color: #22c55e; }
+
+    #transcript {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      min-height: 50px;
+      max-height: 200px;
       overflow-y: auto;
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       color: #cbd5e1;
-      line-height: 1.6;
+      line-height: 1.5;
     }
 
     #transcript:empty::before {
-      content: "La conversation apparaitra ici...";
+      content: "La conversation vocale apparaitra ici...";
       color: #475569;
       font-style: italic;
     }
@@ -138,93 +274,47 @@
     .transcript-user { color: #38bdf8; }
     .transcript-assistant { color: #a78bfa; }
 
-    /* Results */
-    #results-container {
-      width: 100%;
-    }
-
-    #results-container h2 {
-      font-size: 1.1rem;
-      color: #38bdf8;
-      margin-bottom: 0.75rem;
-    }
-
-    #results {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 0.75rem;
-    }
-
-    .item-card {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 10px;
-      padding: 1rem 1.25rem;
-      transition: border-color 0.2s;
-      animation: fadeIn 0.3s ease;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(8px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    .item-card:hover { border-color: #38bdf8; }
-
-    .item-card .article-no {
-      font-size: 1.3rem;
-      font-weight: 700;
-      color: #38bdf8;
-      margin-bottom: 0.3rem;
-    }
-
-    .item-card .description {
-      font-size: 0.95rem;
-      color: #e2e8f0;
-      margin-bottom: 0.5rem;
-    }
-
-    .item-card .meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      font-size: 0.8rem;
-    }
-
-    .item-card .meta span {
-      background: #0f172a;
-      padding: 0.2rem 0.6rem;
-      border-radius: 6px;
-      color: #94a3b8;
-    }
-
-    .item-card .meta span strong { color: #cbd5e1; }
-
     audio { display: none; }
+
+    /* ── Mobile ── */
+    @media (max-width: 640px) {
+      header { padding: 0.75rem 1rem; gap: 0.75rem; }
+      header h1 { font-size: 1rem; }
+      main { padding: 1rem 1rem 5rem; }
+      #voice-panel { width: 280px; }
+    }
   </style>
 </head>
 <body>
   <header>
-    <div>
-      <h1>Magasin TGE - Assistant Vocal</h1>
-      <p>Demandez-moi de chercher un article dans l'inventaire par la voix</p>
+    <h1>Magasin TGE</h1>
+    <div id="search-bar">
+      <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <input type="text" id="search-input" placeholder="Rechercher un article, composant, num&#233;ro..." autocomplete="off" autofocus>
     </div>
-    <button id="logout-btn" onclick="logout()">Déconnexion</button>
+    <button id="logout-btn" onclick="logout()">D&#233;connexion</button>
   </header>
 
   <main>
-    <button id="mic-btn" title="Cliquez pour démarrer">
+    <div id="empty-state">
+      <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <p>Recherchez un article dans l'inventaire</p>
+      <div class="hint">Tapez un nom, un num&#233;ro d'article, un composant...</div>
+    </div>
+    <div id="result-count" style="display:none;"></div>
+    <div id="results"></div>
+  </main>
+
+  <!-- Floating voice assistant -->
+  <div id="voice-fab">
+    <div id="voice-panel">
+      <div id="status">Cliquez pour parler</div>
+      <div id="transcript"></div>
+    </div>
+    <button id="mic-btn" title="Assistant vocal">
       <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
     </button>
-    <div id="status">Cliquez sur le micro pour commencer</div>
-
-    <div id="transcript"></div>
-
-    <div id="results-container" style="display:none;">
-      <h2>Résultats de recherche</h2>
-      <div id="results"></div>
-    </div>
-  </main>
+  </div>
 
   <audio id="remote-audio" autoplay></audio>
   <script>
