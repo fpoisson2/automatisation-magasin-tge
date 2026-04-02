@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Magasin TGE - Assistant Vocal</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    header {
+      width: 100%;
+      padding: 1.5rem 2rem;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    #logout-btn {
+      position: absolute;
+      right: 2rem;
+      padding: 0.4rem 1rem;
+      border-radius: 6px;
+      border: 1px solid #475569;
+      background: transparent;
+      color: #94a3b8;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    #logout-btn:hover {
+      border-color: #f87171;
+      color: #f87171;
+    }
+
+    header h1 {
+      font-size: 1.5rem;
+      color: #38bdf8;
+    }
+
+    header p {
+      color: #94a3b8;
+      font-size: 0.9rem;
+      margin-top: 0.3rem;
+    }
+
+    main {
+      width: 100%;
+      max-width: 1000px;
+      padding: 2rem;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    /* Mic button */
+    #mic-btn {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      border: 3px solid #334155;
+      background: #1e293b;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    #mic-btn:hover { border-color: #38bdf8; }
+
+    #mic-btn.active {
+      border-color: #22c55e;
+      box-shadow: 0 0 30px rgba(34, 197, 94, 0.3);
+      animation: pulse 2s infinite;
+    }
+
+    #mic-btn.active svg { fill: #22c55e; }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.2); }
+      50% { box-shadow: 0 0 40px rgba(34, 197, 94, 0.4); }
+    }
+
+    #mic-btn svg {
+      width: 48px;
+      height: 48px;
+      fill: #94a3b8;
+      transition: fill 0.3s;
+    }
+
+    #status {
+      font-size: 0.95rem;
+      color: #94a3b8;
+      min-height: 1.5em;
+    }
+
+    #status.error { color: #f87171; }
+    #status.connected { color: #22c55e; }
+
+    /* Transcript */
+    #transcript {
+      width: 100%;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      min-height: 60px;
+      max-height: 150px;
+      overflow-y: auto;
+      font-size: 0.9rem;
+      color: #cbd5e1;
+      line-height: 1.6;
+    }
+
+    #transcript:empty::before {
+      content: "La conversation apparaitra ici...";
+      color: #475569;
+      font-style: italic;
+    }
+
+    .transcript-user { color: #38bdf8; }
+    .transcript-assistant { color: #a78bfa; }
+
+    /* Results */
+    #results-container {
+      width: 100%;
+    }
+
+    #results-container h2 {
+      font-size: 1.1rem;
+      color: #38bdf8;
+      margin-bottom: 0.75rem;
+    }
+
+    #results {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .item-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      transition: border-color 0.2s;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .item-card:hover { border-color: #38bdf8; }
+
+    .item-card .article-no {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #38bdf8;
+      margin-bottom: 0.3rem;
+    }
+
+    .item-card .description {
+      font-size: 0.95rem;
+      color: #e2e8f0;
+      margin-bottom: 0.5rem;
+    }
+
+    .item-card .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+    }
+
+    .item-card .meta span {
+      background: #0f172a;
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+      color: #94a3b8;
+    }
+
+    .item-card .meta span strong { color: #cbd5e1; }
+
+    audio { display: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Magasin TGE - Assistant Vocal</h1>
+      <p>Demandez-moi de chercher un article dans l'inventaire par la voix</p>
+    </div>
+    <button id="logout-btn" onclick="logout()">Déconnexion</button>
+  </header>
+
+  <main>
+    <button id="mic-btn" title="Cliquez pour démarrer">
+      <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+    </button>
+    <div id="status">Cliquez sur le micro pour commencer</div>
+
+    <div id="transcript"></div>
+
+    <div id="results-container" style="display:none;">
+      <h2>Résultats de recherche</h2>
+      <div id="results"></div>
+    </div>
+  </main>
+
+  <audio id="remote-audio" autoplay></audio>
+  <script>
+    async function logout() {
+      await fetch("/api/logout", { method: "POST" });
+      window.location.href = "/login";
+    }
+  </script>
+  <script src="app.js"></script>
+</body>
+</html>

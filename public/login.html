@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connexion - Magasin TGE</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .login-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+
+    .login-card h1 {
+      font-size: 1.5rem;
+      color: #38bdf8;
+      margin-bottom: 0.3rem;
+    }
+
+    .login-card p {
+      color: #94a3b8;
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+      text-align: left;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-bottom: 0.4rem;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 0.7rem 1rem;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus {
+      border-color: #38bdf8;
+    }
+
+    button[type="submit"] {
+      width: 100%;
+      padding: 0.75rem;
+      border: none;
+      border-radius: 8px;
+      background: #38bdf8;
+      color: #0f172a;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 0.5rem;
+      transition: background 0.2s;
+    }
+
+    button[type="submit"]:hover {
+      background: #7dd3fc;
+    }
+
+    button[type="submit"]:disabled {
+      background: #475569;
+      cursor: not-allowed;
+    }
+
+    .error-msg {
+      color: #f87171;
+      font-size: 0.85rem;
+      margin-top: 1rem;
+      min-height: 1.2em;
+    }
+  </style>
+</head>
+<body>
+  <form class="login-card" id="login-form">
+    <h1>Magasin TGE</h1>
+    <p>Assistant vocal d'inventaire</p>
+
+    <div class="form-group">
+      <label for="username">Nom d'utilisateur</label>
+      <input type="text" id="username" name="username" required autocomplete="username" autofocus>
+    </div>
+
+    <div class="form-group">
+      <label for="password">Mot de passe</label>
+      <input type="password" id="password" name="password" required autocomplete="current-password">
+    </div>
+
+    <button type="submit">Se connecter</button>
+    <div class="error-msg" id="error"></div>
+  </form>
+
+  <script>
+    document.getElementById("login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = e.target.querySelector("button");
+      const errorEl = document.getElementById("error");
+      errorEl.textContent = "";
+      btn.disabled = true;
+      btn.textContent = "Connexion...";
+
+      try {
+        const res = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: document.getElementById("username").value,
+            password: document.getElementById("password").value,
+          }),
+        });
+
+        if (res.ok) {
+          window.location.href = "/";
+        } else {
+          errorEl.textContent = "Nom d'utilisateur ou mot de passe invalide.";
+        }
+      } catch {
+        errorEl.textContent = "Erreur de connexion au serveur.";
+      }
+
+      btn.disabled = false;
+      btn.textContent = "Se connecter";
+    });
+  </script>
+</body>
+</html>
