@@ -89,8 +89,9 @@ function renderOrders() {
   let html = "";
 
   if (pending.length > 0) {
-    html += `<div class="section-title">En attente — impression (${pending.length})</div>`;
+    html += `<div class="section-title">En attente (${pending.length})</div>`;
     html += pending.map((o) => renderOrderCard(o, [
+      { label: "Préparer", cls: "btn-prepare", status: "preparing" },
       { label: "Annuler", cls: "btn-cancel-order", status: "cancelled" },
     ])).join("");
   }
