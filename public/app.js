@@ -486,7 +486,7 @@ const STATUS_LABELS = {
 
 const STATUS_NOTIF = {
   preparing: "Votre commande est en pr\u00e9paration!",
-  ready: "Votre commande est pr\u00eate! Pr\u00e9sentez-vous au comptoir.",
+  ready: "Votre commande est pr\u00eate! Pr\u00e9sentez-vous au comptoir avec votre carte \u00e9tudiante.",
 };
 
 
@@ -578,6 +578,7 @@ function renderMyOrderCard(order, statusText, statusCls, faded) {
         ${order.status === "ready" ? `<button class="dismiss-btn" data-order="${order.order_number}">Confirmer la r\u00e9ception</button>` : ""}
         <span class="expand-arrow">&#9662;</span>
       </div>
+      ${order.status === "ready" ? `<div class="ready-instructions">Pr\u00e9sentez-vous au comptoir avec votre <strong>carte \u00e9tudiante</strong> et le num\u00e9ro <strong>#${order.order_number}</strong></div>` : ""}
       <div class="my-order-items" data-detail="${order.order_number}" style="display:none;">
         ${detail}
         <div class="my-order-actions">
