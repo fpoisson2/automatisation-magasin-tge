@@ -1,7 +1,8 @@
 async function loadStats() {
+  try {
   const res = await fetch("/api/admin/stats");
   if (res.status === 401) { window.location.href = "/login"; return; }
-  if (!res.ok) return;
+  if (!res.ok) { document.getElementById("summary").textContent = "Erreur de chargement"; return; }
   const stats = await res.json();
 
   // Summary cards
@@ -38,6 +39,10 @@ async function loadStats() {
       <td class="bar-cell"><div class="bar" style="width:${(a.total_qty / maxQty) * 100}%"></div></td>
     </tr>
   `).join("");
+  } catch (err) {
+    console.error("Stats error:", err);
+    document.getElementById("summary").textContent = "Erreur: " + err.message;
+  }
 }
 
 loadStats();

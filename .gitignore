@@ -4,6 +4,7 @@ embeddings.json
 magasin.db
 magasin.db-shm
 magasin.db-wal
+sessions.db
 venv/
 print-client/node_modules/
 print-client/.env

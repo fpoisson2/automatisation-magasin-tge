@@ -84,6 +84,16 @@ document.getElementById("name-input").addEventListener("keydown", (e) => {
 
 initDA();
 
+// ── Student logout ──
+const logoutBtn = document.getElementById("student-logout");
+if (studentDA) logoutBtn.style.display = "";
+logoutBtn.addEventListener("click", () => {
+  localStorage.removeItem("studentDA");
+  localStorage.removeItem("studentName");
+  localStorage.removeItem("cart");
+  window.location.reload();
+});
+
 // ── History modal ──
 historyBtn.addEventListener("click", () => {
   historyModal.classList.add("open");

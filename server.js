@@ -43,8 +43,12 @@ const searchLimiter = rateLimit({
 });
 app.use(express.urlencoded({ extended: true }));
 
+const SqliteStore = require("better-sqlite3-session-store")(session);
+const sessionDb = new Database(path.join(__dirname, "sessions.db"));
+
 app.use(
   session({
+    store: new SqliteStore({ client: sessionDb, expired: { clear: true, intervalMs: 3600000 } }),
     secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex"),
     resave: false,
     saveUninitialized: false,
