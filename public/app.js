@@ -163,12 +163,14 @@ async function loadFrequentArticles() {
 const photoBtn = document.getElementById("photo-search-btn");
 const photoInput = document.getElementById("photo-input");
 const photoStatus = document.getElementById("photo-status");
+let lastSearchPhoto = null; // Keep reference to last photo search file
 
 photoBtn.addEventListener("click", () => photoInput.click());
 
 photoInput.addEventListener("change", async () => {
   const file = photoInput.files[0];
   if (!file) return;
+  lastSearchPhoto = file; // Store for learning
   photoInput.value = "";
 
   photoStatus.textContent = "Identification en cours...";
@@ -231,6 +233,7 @@ searchInput.addEventListener("input", () => {
     return;
   }
 
+  lastSearchPhoto = null; // Clear photo context for text search
   searchTimer = setTimeout(() => liveSearch(query), 120);
 });
 
@@ -395,6 +398,12 @@ function addToCart(articleNo, description, prix, localisation) {
     existing.quantity++;
   } else {
     cart.push({ article_no: articleNo, description, prix, localisation, quantity: 1 });
+    // Photo learning: if this add came after a photo search, associate the photo
+    if (lastSearchPhoto) {
+      const formData = new FormData();
+      formData.append("photo", lastSearchPhoto);
+      fetch(`/api/items/${encodeURIComponent(articleNo)}/learn-photo`, { method: "POST", body: formData }).catch(() => {});
+    }
   }
   renderCart();
 }

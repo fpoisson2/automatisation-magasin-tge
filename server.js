@@ -177,9 +177,82 @@ function cosineSimilarity(a, b) {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
+// Synonym expansion for search
+const SYNONYMS = {
+  "condo": "condensateur",
+  "condos": "condensateur",
+  "cap": "condensateur",
+  "resist": "résistance",
+  "res": "résistance",
+  "pot": "potentiomètre",
+  "potard": "potentiomètre",
+  "transfo": "transformateur",
+  "alim": "alimentation",
+  "alimantation": "alimentation",
+  "proto": "protoboard",
+  "breadboard": "protoboard",
+  "fer": "fer à souder",
+  "scope": "oscilloscope",
+  "oscillo": "oscilloscope",
+  "multi": "multimètre",
+  "multimetre": "multimètre",
+  "dmm": "multimètre",
+  "ldr": "photorésistance",
+  "led": "led",
+  "del": "led",
+  "diode electroluminescente": "led",
+  "usb": "usb",
+  "hdmi": "hdmi",
+  "bnc": "bnc",
+  "rj45": "rj45",
+  "ethernet": "rj45",
+  "rpi": "raspberry pi",
+  "rasp": "raspberry pi",
+  "uno": "arduino uno",
+  "mega": "arduino mega",
+  "nano": "arduino nano",
+  "opamp": "amplificateur opérationnel",
+  "op-amp": "amplificateur opérationnel",
+  "ampli": "amplificateur",
+  "ic": "circuit intégré",
+  "ci": "circuit intégré",
+  "pcb": "circuit imprimé",
+  "mosfet": "mosfet",
+  "bjt": "transistor",
+  "npn": "transistor npn",
+  "pnp": "transistor pnp",
+  "relay": "relais",
+  "relai": "relais",
+  "switch": "interrupteur",
+  "bouton": "bouton poussoir",
+  "wire": "fil",
+  "cable": "câble",
+  "solder": "soudure",
+  "soudure": "soudure",
+  "clip": "pince",
+  "probe": "sonde",
+  "batt": "batterie",
+  "pile": "batterie",
+  "moteur": "moteur",
+  "motor": "moteur",
+  "servo": "servomoteur",
+  "stepper": "moteur pas à pas",
+};
+
+function expandSynonyms(query) {
+  const terms = query.toLowerCase().split(/\s+/);
+  const expanded = [...terms];
+  for (const term of terms) {
+    if (SYNONYMS[term]) {
+      expanded.push(...SYNONYMS[term].split(/\s+/));
+    }
+  }
+  return [...new Set(expanded)].join(" ");
+}
+
 // Keyword search (exact matching)
 function keywordSearch(query, topK = 10) {
-  const q = query.toLowerCase().trim();
+  const q = expandSynonyms(query).toLowerCase().trim();
   const terms = q.split(/\s+/);
 
   return inventoryData
@@ -364,6 +437,13 @@ db.exec(`
     password TEXT NOT NULL,
     role TEXT DEFAULT 'magasinier',
     name TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS item_photos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    article_no TEXT NOT NULL,
+    photo_path TEXT NOT NULL,
+    source TEXT DEFAULT 'user',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
   CREATE TABLE IF NOT EXISTS item_extras (
@@ -622,6 +702,10 @@ app.get("/admin/stats", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "stats.html"));
 });
 
+app.get("/admin/items", requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "items-admin.html"));
+});
+
 app.get("/admin/users", requireAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "users.html"));
 });
@@ -697,6 +781,39 @@ app.post("/api/admin/items/:articleNo/doc", requireAuth, (req, res) => {
   db.prepare(
     "INSERT INTO item_extras (article_no, doc_url) VALUES (?, ?) ON CONFLICT(article_no) DO UPDATE SET doc_url = ?"
   ).run(req.params.articleNo, doc_url, doc_url);
+  res.json({ success: true });
+});
+
+// ── Photo learning: associate search photos with articles ──
+const photoLearnUpload = multer({
+  storage: multer.diskStorage({
+    destination: path.join(__dirname, "uploads", "learned"),
+    filename: (req, file, cb) => {
+      const name = req.params.articleNo.replace(/[^a-zA-Z0-9_-]/g, "_");
+      cb(null, `${name}_${Date.now()}${path.extname(file.originalname).toLowerCase()}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Format invalide"));
+  },
+});
+
+app.post("/api/items/:articleNo/learn-photo", apiLimiter, photoLearnUpload.single("photo"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Photo requise" });
+  const photoPath = `/uploads/learned/${req.file.filename}`;
+  db.prepare("INSERT INTO item_photos (article_no, photo_path, source) VALUES (?, ?, 'user')").run(req.params.articleNo, photoPath);
+
+  // If article has no main photo, set this as the main one
+  const extras = db.prepare("SELECT photo_path FROM item_extras WHERE article_no = ?").get(req.params.articleNo);
+  if (!extras || !extras.photo_path) {
+    db.prepare(
+      "INSERT INTO item_extras (article_no, photo_path) VALUES (?, ?) ON CONFLICT(article_no) DO UPDATE SET photo_path = ?"
+    ).run(req.params.articleNo, photoPath, photoPath);
+  }
+
+  console.log(`Photo learned: ${req.params.articleNo} ← ${req.file.filename}`);
   res.json({ success: true });
 });
 

@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Magasin TGE - Articles</title>
+  <link rel="stylesheet" href="/design.css">
+  <style>
+    header {
+      background: var(--color-primary);
+      color: #fff;
+      padding: 0 var(--space-xl);
+      height: var(--header-height);
+      display: flex;
+      align-items: center;
+      gap: var(--space-lg);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    header h1 { font-size: var(--font-size-lg); font-weight: 700; }
+    header .spacer { flex: 1; }
+    header a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: var(--font-size-sm); }
+    header a:hover { color: #fff; }
+
+    main {
+      max-width: 700px;
+      margin: 0 auto;
+      padding: var(--space-xl);
+    }
+
+    .search-box {
+      position: relative;
+      margin-bottom: var(--space-lg);
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: var(--space-sm) var(--space-md) var(--space-sm) 2.25rem;
+      border: 1px solid var(--color-input-border);
+      border-radius: var(--radius-pill);
+      font-size: var(--font-size-base);
+      outline: none;
+    }
+
+    .search-box input:focus { border-color: var(--color-accent); }
+
+    .search-box svg {
+      position: absolute;
+      left: 0.75rem;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      fill: var(--color-text-muted);
+    }
+
+    .item-edit {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-lg);
+      margin-bottom: var(--space-sm);
+    }
+
+    .item-edit .item-header {
+      display: flex;
+      gap: var(--space-md);
+      align-items: flex-start;
+      margin-bottom: var(--space-md);
+    }
+
+    .item-edit .item-photo-preview {
+      width: 80px;
+      height: 80px;
+      border-radius: var(--radius-md);
+      background: var(--color-input-bg);
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .item-edit .item-photo-empty {
+      width: 80px;
+      height: 80px;
+      border-radius: var(--radius-md);
+      background: var(--color-input-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-text-faint);
+      font-size: var(--font-size-xs);
+      flex-shrink: 0;
+    }
+
+    .item-edit .item-info { flex: 1; min-width: 0; }
+
+    .item-edit .article-no {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      color: var(--color-accent);
+      font-size: var(--font-size-sm);
+    }
+
+    .item-edit .description {
+      font-size: var(--font-size-sm);
+      color: var(--color-text-secondary);
+      margin-top: var(--space-xs);
+    }
+
+    .item-edit .actions {
+      display: flex;
+      gap: var(--space-sm);
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .item-edit .actions label {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-xs);
+      padding: var(--space-xs) var(--space-md);
+      border: 1px solid var(--color-input-border);
+      border-radius: var(--radius-md);
+      font-size: var(--font-size-xs);
+      color: var(--color-text-secondary);
+      cursor: pointer;
+    }
+
+    .item-edit .actions label:hover { border-color: var(--color-accent); color: var(--color-accent); }
+    .item-edit .actions label input { display: none; }
+
+    .item-edit .actions .doc-input {
+      flex: 1;
+      min-width: 150px;
+      padding: var(--space-xs) var(--space-sm);
+      border: 1px solid var(--color-input-border);
+      border-radius: var(--radius-md);
+      font-size: var(--font-size-xs);
+      outline: none;
+    }
+
+    .item-edit .actions .doc-input:focus { border-color: var(--color-accent); }
+
+    .item-edit .actions .save-doc {
+      padding: var(--space-xs) var(--space-sm);
+      border: none;
+      border-radius: var(--radius-md);
+      background: var(--color-accent);
+      color: #fff;
+      font-size: var(--font-size-xs);
+      cursor: pointer;
+    }
+
+    .item-edit .photo-count {
+      font-size: var(--font-size-xs);
+      color: var(--color-text-faint);
+      margin-top: var(--space-xs);
+    }
+
+    .status-msg {
+      font-size: var(--font-size-xs);
+      margin-left: var(--space-sm);
+    }
+
+    .status-msg.ok { color: var(--color-success); }
+    .status-msg.error { color: var(--color-danger); }
+
+    #empty { text-align: center; color: var(--color-text-faint); padding: 3rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Articles</h1>
+    <div class="spacer"></div>
+    <a href="/admin">Commandes</a>
+    <a href="/admin/stats">Stats</a>
+  </header>
+
+  <main>
+    <div class="search-box">
+      <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <input type="text" id="item-search" placeholder="Rechercher un article pour modifier sa photo ou doc..." autocomplete="off">
+    </div>
+    <div id="empty">Recherchez un article ci-dessus</div>
+    <div id="item-results"></div>
+  </main>
+
+  <script>
+    const searchInput = document.getElementById("item-search");
+    const resultsEl = document.getElementById("item-results");
+    const emptyEl = document.getElementById("empty");
+    let timer = null;
+
+    searchInput.addEventListener("input", () => {
+      if (timer) clearTimeout(timer);
+      const q = searchInput.value.trim();
+      if (!q) { resultsEl.innerHTML = ""; emptyEl.style.display = ""; return; }
+      timer = setTimeout(() => search(q), 200);
+    });
+
+    async function search(q) {
+      const res = await fetch("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q }),
+      });
+      if (!res.ok) return;
+      const items = await res.json();
+      emptyEl.style.display = "none";
+      resultsEl.innerHTML = "";
+
+      for (const item of items) {
+        const articleNo = item["No d'article"];
+        const extrasRes = await fetch(`/api/items/${encodeURIComponent(articleNo)}/extras`);
+        const extras = extrasRes.ok ? await extrasRes.json() : {};
+
+        const div = document.createElement("div");
+        div.className = "item-edit";
+        div.innerHTML = `
+          <div class="item-header">
+            ${extras.photo_path
+              ? `<img class="item-photo-preview" src="${extras.photo_path}" alt="">`
+              : `<div class="item-photo-empty">Pas de photo</div>`
+            }
+            <div class="item-info">
+              <div class="article-no">#${articleNo}</div>
+              <div class="description">${item["Description"]}</div>
+              ${extras.photo_path ? `<div class="photo-count">Photo: ${extras.photo_path.split("/").pop()}</div>` : ""}
+            </div>
+          </div>
+          <div class="actions">
+            <label>
+              <input type="file" accept="image/*" data-article="${articleNo}" class="photo-upload">
+              Changer la photo
+            </label>
+            <input type="text" class="doc-input" data-article="${articleNo}" placeholder="URL documentation" value="${extras.doc_url || ""}">
+            <button class="save-doc" data-article="${articleNo}">Sauver doc</button>
+          </div>
+        `;
+        resultsEl.appendChild(div);
+      }
+
+      // Photo upload handlers
+      resultsEl.querySelectorAll(".photo-upload").forEach((input) => {
+        input.addEventListener("change", async () => {
+          const file = input.files[0];
+          if (!file) return;
+          const formData = new FormData();
+          formData.append("photo", file);
+          const articleNo = input.dataset.article;
+          const res = await fetch(`/api/admin/items/${encodeURIComponent(articleNo)}/photo`, {
+            method: "POST",
+            body: formData,
+          });
+          const label = input.closest("label");
+          if (res.ok) {
+            label.insertAdjacentHTML("afterend", `<span class="status-msg ok">Photo enregistr\u00e9e</span>`);
+            search(searchInput.value.trim());
+          } else {
+            label.insertAdjacentHTML("afterend", `<span class="status-msg error">Erreur</span>`);
+          }
+        });
+      });
+
+      // Doc save handlers
+      resultsEl.querySelectorAll(".save-doc").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const articleNo = btn.dataset.article;
+          const docInput = resultsEl.querySelector(`.doc-input[data-article="${articleNo}"]`);
+          const url = docInput.value.trim();
+          if (!url) return;
+          const res = await fetch(`/api/admin/items/${encodeURIComponent(articleNo)}/doc`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ doc_url: url }),
+          });
+          if (res.ok) {
+            btn.insertAdjacentHTML("afterend", `<span class="status-msg ok">Sauv\u00e9</span>`);
+          }
+        });
+      });
+    }
+  </script>
+</body>
+</html>
