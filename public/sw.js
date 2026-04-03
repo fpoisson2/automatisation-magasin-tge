@@ -1,16 +1,24 @@
-const CACHE = "tge-v1";
+const CACHE = "tge-v2";
 
 self.addEventListener("install", (e) => {
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (e) => {
-  e.waitUntil(clients.claim());
+  // Clean old caches
+  e.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+    ).then(() => clients.claim())
+  );
 });
 
 self.addEventListener("fetch", (e) => {
-  // Network-first for API calls, cache-first for static assets
-  if (e.request.url.includes("/api/")) return;
+  // Never cache API calls or page navigations
+  if (e.request.url.includes("/api/") || e.request.mode === "navigate") return;
+
+  // Only cache static assets (css, js, images, icons)
+  if (!e.request.url.match(/\.(css|js|png|ico|woff2?)$/)) return;
 
   e.respondWith(
     fetch(e.request)

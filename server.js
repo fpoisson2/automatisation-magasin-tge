@@ -821,6 +821,7 @@ app.get("/api/admin/me", requireAuth, (req, res) => {
 
 // ── Statistics ──
 app.get("/api/admin/stats", requireAuth, (req, res) => {
+  console.log("Stats request from:", req.session.userName, "role:", req.session.userRole);
   const topArticles = db.prepare(`
     SELECT oi.article_no, oi.description, SUM(oi.quantity) as total_qty, COUNT(DISTINCT oi.order_id) as order_count
     FROM order_items oi

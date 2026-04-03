@@ -25,6 +25,25 @@ const daModal = document.getElementById("da-modal");
 const userBadge = document.getElementById("user-badge");
 
 // ── DA identification ──
+async function checkAdminSession() {
+  try {
+    const res = await fetch("/api/admin/me");
+    if (res.ok) {
+      const data = await res.json();
+      daModal.querySelector(".modal").innerHTML = `
+        <h2>Magasin TGE</h2>
+        <p style="color:var(--color-text-secondary);margin-bottom:1rem;">Connect\u00e9 comme <strong>${data.name}</strong> (${data.role})</p>
+        <div class="btn-row" style="justify-content:center;gap:0.5rem;">
+          <a href="/admin" class="btn btn-primary" style="text-decoration:none;">Dashboard</a>
+          <button class="btn btn-secondary" onclick="fetch('/api/logout',{method:'POST'}).then(()=>location.reload())">D\u00e9connexion</button>
+        </div>
+      `;
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
 function initDA() {
   if (studentDA && studentName) {
     daModal.classList.remove("open");
@@ -33,7 +52,10 @@ function initDA() {
     loadFrequentArticles();
   } else {
     daModal.classList.add("open");
-    document.getElementById("da-input").focus();
+    // If admin is logged in, show dashboard link instead of DA form
+    checkAdminSession().then((isAdmin) => {
+      if (!isAdmin) document.getElementById("da-input")?.focus();
+    });
   }
 }
 
@@ -70,6 +92,7 @@ document.getElementById("da-confirm").addEventListener("click", async () => {
   localStorage.setItem("studentName", name);
   daModal.classList.remove("open");
   userBadge.textContent = name;
+  logoutBtn.style.display = "";
   searchInput.focus();
   requestNotifPermission();
   connectSSE();
