@@ -7,6 +7,7 @@ const path = require("path");
 const Database = require("better-sqlite3");
 const rateLimit = require("express-rate-limit");
 const multer = require("multer");
+const bcrypt = require("bcryptjs");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -66,6 +67,11 @@ function requireAuth(req, res, next) {
   return res.redirect("/login");
 }
 
+function requireAdmin(req, res, next) {
+  if (req.session && req.session.authenticated && req.session.userRole === "admin") return next();
+  return res.status(403).json({ error: "Accès réservé aux administrateurs" });
+}
+
 // ── Login page ──
 app.get("/login", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "login.html"));
@@ -73,12 +79,13 @@ app.get("/login", (req, res) => {
 
 app.post("/api/login", (req, res) => {
   const { username, password } = req.body;
-  if (
-    username === process.env.APP_USERNAME &&
-    password === process.env.APP_PASSWORD
-  ) {
+  const user = db.prepare("SELECT * FROM admin_users WHERE username = ?").get(username);
+  if (user && bcrypt.compareSync(password, user.password)) {
     req.session.authenticated = true;
-    return res.json({ success: true });
+    req.session.userId = user.id;
+    req.session.userRole = user.role;
+    req.session.userName = user.name || user.username;
+    return res.json({ success: true, role: user.role, name: user.name });
   }
   return res.status(401).json({ error: "Identifiants invalides" });
 });
@@ -347,6 +354,14 @@ db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS admin_users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    role TEXT DEFAULT 'magasinier',
+    name TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
   CREATE TABLE IF NOT EXISTS item_extras (
     article_no TEXT PRIMARY KEY,
     photo_path TEXT,
@@ -376,6 +391,16 @@ db.exec(`
     localisation TEXT
   );
 `);
+
+// Seed default admin from env if no users exist
+{
+  const count = db.prepare("SELECT COUNT(*) as cnt FROM admin_users").get().cnt;
+  if (count === 0 && process.env.APP_USERNAME && process.env.APP_PASSWORD) {
+    const hash = bcrypt.hashSync(process.env.APP_PASSWORD, 10);
+    db.prepare("INSERT INTO admin_users (username, password, role, name) VALUES (?, ?, 'admin', 'Administrateur')").run(process.env.APP_USERNAME, hash);
+    console.log(`Admin user '${process.env.APP_USERNAME}' created from env`);
+  }
+}
 
 // ── SSE: connected clients ──
 const sseClients = new Set(); // { res, da? } — da is set for students, null for admin
@@ -517,17 +542,31 @@ app.post("/api/orders", orderLimiter, (req, res) => {
 
 // Get active orders for a student by DA
 app.get("/api/orders/by-da/:da", apiLimiter, (req, res) => {
-  const orders = db.prepare(
-    "SELECT * FROM orders WHERE student_da = ? ORDER BY created_at DESC LIMIT 50"
-  ).all(req.params.da);
+  const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+  const offset = parseInt(req.query.offset) || 0;
+  const search = req.query.q || "";
 
-  for (const order of orders) {
-    order.items = db.prepare(
-      "SELECT * FROM order_items WHERE order_id = ?"
-    ).all(order.id);
+  let orders;
+  if (search) {
+    orders = db.prepare(`
+      SELECT o.* FROM orders o
+      JOIN order_items oi ON oi.order_id = o.id
+      WHERE o.student_da = ? AND (oi.article_no LIKE ? OR oi.description LIKE ? OR o.order_number LIKE ?)
+      GROUP BY o.id
+      ORDER BY o.created_at DESC LIMIT ? OFFSET ?
+    `).all(req.params.da, `%${search}%`, `%${search}%`, `%${search}%`, limit, offset);
+  } else {
+    orders = db.prepare(
+      "SELECT * FROM orders WHERE student_da = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    ).all(req.params.da, limit, offset);
   }
 
-  res.json(orders);
+  for (const order of orders) {
+    order.items = db.prepare("SELECT * FROM order_items WHERE order_id = ?").all(order.id);
+  }
+
+  const total = db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE student_da = ?").get(req.params.da).cnt;
+  res.json({ orders, total, limit, offset });
 });
 
 app.get("/api/orders/:number", apiLimiter, (req, res) => {
@@ -575,7 +614,12 @@ app.get("/admin", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin.html"));
 });
 
+app.get("/admin/stats", requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "stats.html"));
+});
+
 app.use("/admin.js", requireAuth, express.static(path.join(__dirname, "public", "admin.js")));
+app.use("/stats.js", requireAuth, express.static(path.join(__dirname, "public", "stats.js")));
 
 app.get("/api/admin/orders", requireAuth, (req, res) => {
   const orders = db.prepare(
@@ -739,6 +783,84 @@ app.post("/api/session", requireAuth, async (req, res) => {
     console.error("Session creation failed:", err);
     res.status(500).json({ error: "Erreur serveur" });
   }
+});
+
+// ── Admin user management (admin role only) ──
+app.get("/api/admin/users", requireAdmin, (req, res) => {
+  const users = db.prepare("SELECT id, username, role, name, created_at FROM admin_users ORDER BY created_at").all();
+  res.json(users);
+});
+
+app.post("/api/admin/users", requireAdmin, (req, res) => {
+  const { username, password, role, name } = req.body;
+  if (!username || !password) return res.status(400).json({ error: "Nom d'utilisateur et mot de passe requis" });
+  if (role && !["admin", "magasinier"].includes(role)) return res.status(400).json({ error: "Rôle invalide" });
+  const hash = bcrypt.hashSync(password, 10);
+  try {
+    db.prepare("INSERT INTO admin_users (username, password, role, name) VALUES (?, ?, ?, ?)").run(username, hash, role || "magasinier", name || username);
+    res.json({ success: true });
+  } catch (err) {
+    if (err.message.includes("UNIQUE")) return res.status(409).json({ error: "Nom d'utilisateur déjà pris" });
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+app.delete("/api/admin/users/:id", requireAdmin, (req, res) => {
+  if (parseInt(req.params.id) === req.session.userId) return res.status(400).json({ error: "Impossible de supprimer votre propre compte" });
+  db.prepare("DELETE FROM admin_users WHERE id = ?").run(req.params.id);
+  res.json({ success: true });
+});
+
+app.get("/api/admin/me", requireAuth, (req, res) => {
+  res.json({ id: req.session.userId, role: req.session.userRole, name: req.session.userName });
+});
+
+// ── Statistics ──
+app.get("/api/admin/stats", requireAuth, (req, res) => {
+  const topArticles = db.prepare(`
+    SELECT oi.article_no, oi.description, SUM(oi.quantity) as total_qty, COUNT(DISTINCT oi.order_id) as order_count
+    FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id
+    WHERE o.status != 'cancelled'
+    GROUP BY oi.article_no
+    ORDER BY total_qty DESC
+    LIMIT 20
+  `).all();
+
+  const avgPrepTime = db.prepare(`
+    SELECT AVG((julianday(updated_at) - julianday(created_at)) * 1440) as avg_minutes
+    FROM orders
+    WHERE status = 'ready' AND updated_at != created_at
+  `).get();
+
+  const ordersByHour = db.prepare(`
+    SELECT strftime('%H', created_at) as hour, COUNT(*) as count
+    FROM orders
+    WHERE status != 'cancelled'
+    GROUP BY hour
+    ORDER BY hour
+  `).all();
+
+  const ordersByDay = db.prepare(`
+    SELECT date(created_at) as day, COUNT(*) as count
+    FROM orders
+    WHERE status != 'cancelled'
+    GROUP BY day
+    ORDER BY day DESC
+    LIMIT 30
+  `).all();
+
+  const totalOrders = db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status != 'cancelled'").get().cnt;
+  const totalStudents = db.prepare("SELECT COUNT(DISTINCT student_da) as cnt FROM orders WHERE status != 'cancelled'").get().cnt;
+
+  res.json({
+    topArticles,
+    avgPrepTimeMinutes: Math.round(avgPrepTime?.avg_minutes || 0),
+    ordersByHour,
+    ordersByDay,
+    totalOrders,
+    totalStudents,
+  });
 });
 
 app.listen(PORT, () => {

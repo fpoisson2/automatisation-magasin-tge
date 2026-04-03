@@ -164,6 +164,10 @@ fetchOrders();
 
 const evtSource = new EventSource("/api/admin/orders/stream");
 
+evtSource.addEventListener("connected", () => {
+  document.body.classList.remove("sse-offline");
+});
+
 evtSource.addEventListener("order-new", () => {
   playNotificationSound();
   fetchOrders();
@@ -175,5 +179,5 @@ evtSource.addEventListener("order-update", () => {
 });
 
 evtSource.onerror = () => {
-  // EventSource auto-reconnects
+  document.body.classList.add("sse-offline");
 };

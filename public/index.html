@@ -12,6 +12,20 @@
   <title>Magasin TGE</title>
   <link rel="stylesheet" href="/design.css">
   <style>
+    body.sse-offline::after {
+      content: "Connexion perdue...";
+      position: fixed;
+      top: var(--header-height);
+      left: 0;
+      right: 0;
+      background: var(--color-danger);
+      color: #fff;
+      text-align: center;
+      font-size: var(--font-size-xs);
+      padding: 0.2rem;
+      z-index: 200;
+    }
+
     header {
       background: var(--color-primary);
       color: #fff;
@@ -839,13 +853,14 @@
   </div>
 
   <!-- History modal -->
-  <div class="modal-overlay" id="history-modal">
-    <div class="modal" style="max-width:500px;max-height:80vh;overflow-y:auto;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
-        <h2 style="margin:0;">Historique</h2>
+  <div class="modal-overlay" id="history-modal" style="align-items:flex-start;padding-top:3rem;">
+    <div class="modal" style="max-width:500px;max-height:80vh;display:flex;flex-direction:column;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+        <h2 style="margin:0;">Commandes</h2>
         <button class="btn-cancel" id="history-close" style="padding:0.3rem 0.7rem;">&times;</button>
       </div>
-      <div id="my-history"></div>
+      <input type="text" id="history-search" class="input" placeholder="Rechercher une commande..." style="margin-bottom:0.5rem;font-size:var(--font-size-sm);">
+      <div id="my-history" style="flex:1;overflow-y:auto;"></div>
     </div>
   </div>
 

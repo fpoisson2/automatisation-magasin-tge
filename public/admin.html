@@ -6,6 +6,19 @@
   <title>Magasin TGE - Commandes</title>
   <link rel="stylesheet" href="/design.css">
   <style>
+    body.sse-offline::after {
+      content: "Connexion perdue...";
+      position: fixed;
+      top: var(--header-height);
+      left: 0; right: 0;
+      background: var(--color-danger);
+      color: #fff;
+      text-align: center;
+      font-size: var(--font-size-xs);
+      padding: 0.2rem;
+      z-index: 200;
+    }
+
     header {
       background: var(--color-primary);
       color: #fff;
@@ -214,6 +227,7 @@
     <h1>Commandes</h1>
     <div class="spacer"></div>
     <button id="sound-toggle">Son: OFF</button>
+    <a href="/admin/stats">Stats</a>
     <a href="/">Inventaire</a>
     <button id="logout-btn">D&#233;connexion</button>
   </header>

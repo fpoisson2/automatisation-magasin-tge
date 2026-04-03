@@ -95,6 +95,15 @@ historyModal.addEventListener("click", (e) => {
   if (e.target === historyModal) historyModal.classList.remove("open");
 });
 
+let historySearchTimer = null;
+document.getElementById("history-search").addEventListener("input", (e) => {
+  if (historySearchTimer) clearTimeout(historySearchTimer);
+  historySearchTimer = setTimeout(() => {
+    historySearch = e.target.value.trim();
+    refreshMyOrders();
+  }, 300);
+});
+
 const cartFab = document.getElementById("cart-fab");
 const cartBadge = document.getElementById("cart-badge");
 const cartItemsEl = document.getElementById("cart-items");
@@ -496,26 +505,21 @@ function connectSSE() {
 
   evtSource = new EventSource(`/api/orders/stream?da=${encodeURIComponent(studentDA)}`);
 
+  evtSource.addEventListener("connected", () => {
+    document.body.classList.remove("sse-offline");
+  });
+
   evtSource.addEventListener("order-update", (e) => {
     const data = JSON.parse(e.data);
-    // Only care about our DA
     if (data.student_da !== studentDA) return;
-
-    // Push notification
     if (STATUS_NOTIF[data.status]) {
       sendPushNotif(`Commande #${data.order_number}`, STATUS_NOTIF[data.status]);
     }
-
-    // Refresh order display
     refreshMyOrders();
   });
 
-  evtSource.addEventListener("order-new", () => {
-    // Another student's order — ignore for student view
-  });
-
   evtSource.onerror = () => {
-    // Reconnect handled automatically by EventSource
+    document.body.classList.add("sse-offline");
   };
 }
 
@@ -548,100 +552,97 @@ function renderMyOrderCard(order, statusText, statusCls, faded) {
   `;
 }
 
+let allOrdersCache = [];
+let historyOffset = 0;
+let historyTotal = 0;
+let historySearch = "";
+
 async function refreshMyOrders() {
-  if (!studentDA) {
+  if (!studentDA) { myOrdersEl.classList.remove("visible"); return; }
+  try {
+    const q = historySearch ? `&q=${encodeURIComponent(historySearch)}` : "";
+    const res = await fetch(`/api/orders/by-da/${encodeURIComponent(studentDA)}?limit=20&offset=0${q}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    allOrdersCache = data.orders;
+    historyTotal = data.total;
+    historyOffset = data.orders.length;
+    renderOrderLists();
+  } catch (err) { console.error("Failed to load orders:", err); }
+}
+
+async function loadMoreHistory() {
+  const q = historySearch ? `&q=${encodeURIComponent(historySearch)}` : "";
+  const res = await fetch(`/api/orders/by-da/${encodeURIComponent(studentDA)}?limit=20&offset=${historyOffset}${q}`);
+  if (!res.ok) return;
+  const data = await res.json();
+  allOrdersCache = [...allOrdersCache, ...data.orders];
+  historyOffset += data.orders.length;
+  renderOrderLists();
+}
+
+function renderOrderLists() {
+  const allOrders = allOrdersCache;
+  const active = allOrders.filter((o) => o.status !== "picked_up" && o.status !== "cancelled");
+  const history = allOrders.filter((o) => o.status === "picked_up" || o.status === "cancelled");
+
+  // Active at top of page
+  if (active.length) {
+    myOrdersEl.innerHTML = active.map((o) => renderMyOrderCard(o, STATUS_LABELS[o.status] || o.status, o.status, false)).join("");
+    myOrdersEl.classList.add("visible");
+  } else {
+    myOrdersEl.innerHTML = "";
     myOrdersEl.classList.remove("visible");
-    return;
   }
 
-  try {
-    const res = await fetch(`/api/orders/by-da/${encodeURIComponent(studentDA)}`);
-    if (!res.ok) return;
-    const allOrders = await res.json();
+  // History in modal
+  let historyHtml = history.map((o) => {
+    const t = o.status === "cancelled" ? "Annul\u00e9e" : "Termin\u00e9e";
+    return renderMyOrderCard(o, t, "history", true);
+  }).join("");
 
-    const active = allOrders.filter((o) => o.status !== "picked_up" && o.status !== "cancelled");
-    const history = allOrders.filter((o) => o.status === "picked_up" || o.status === "cancelled");
+  if (!historyHtml) historyHtml = `<div style="color:var(--color-text-faint);text-align:center;padding:1rem;">Aucune commande</div>`;
+  if (historyOffset < historyTotal) {
+    historyHtml += `<button id="load-more-btn" class="btn btn-secondary" style="width:100%;margin-top:var(--space-md);">Voir plus</button>`;
+  }
+  myHistoryEl.innerHTML = historyHtml;
+  historyBtn.style.display = (historyTotal > 0 || active.length > 0) ? "" : "none";
 
-    let activeHtml = "";
-    let historyHtml = "";
+  document.getElementById("load-more-btn")?.addEventListener("click", loadMoreHistory);
 
-    for (const order of active) {
-      activeHtml += renderMyOrderCard(order, STATUS_LABELS[order.status] || order.status, order.status, false);
-    }
+  // Bind events
+  for (const container of [myOrdersEl, myHistoryEl]) {
+    container.querySelectorAll(".cancel-link").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!await confirmAction("\u00cates-vous s\u00fbr de vouloir annuler cette demande?")) return;
+        try {
+          const r = await fetch(`/api/orders/${btn.dataset.order}`, { method: "DELETE" });
+          if (r.ok) refreshMyOrders();
+          else { const d = await r.json(); alert(d.error || "Impossible d'annuler"); }
+        } catch { alert("Erreur."); }
+      });
+    });
 
-    if (history.length > 0) {
-      for (const order of history) {
-        const statusText = order.status === "cancelled" ? "Annul\u00e9e" : "Termin\u00e9e";
-        historyHtml += renderMyOrderCard(order, statusText, "history", true);
-      }
-    }
+    container.querySelectorAll(".reorder-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const order = allOrders.find((o) => o.id == btn.dataset.orderId);
+        if (!order) return;
+        for (const item of order.items || []) addToCart(item.article_no, item.description, item.prix, item.localisation);
+        renderCart();
+        historyModal.classList.remove("open");
+        cartModal.classList.add("open");
+      });
+    });
 
-    // Active orders at top
-    if (activeHtml) {
-      myOrdersEl.innerHTML = activeHtml;
-      myOrdersEl.classList.add("visible");
-    } else {
-      myOrdersEl.innerHTML = "";
-      myOrdersEl.classList.remove("visible");
-    }
-
-    // History in modal
-    myHistoryEl.innerHTML = historyHtml || `<div style="color:#aaa;text-align:center;padding:1rem;">Aucune commande pass\u00e9e</div>`;
-    historyBtn.style.display = history.length > 0 ? "" : "none";
-
-    const html = activeHtml + historyHtml;
-    if (html) {
-
-      // Bind events on both containers
-      for (const container of [myOrdersEl, myHistoryEl]) {
-        container.querySelectorAll(".cancel-link").forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            if (!await confirmAction("\u00cates-vous s\u00fbr de vouloir annuler cette demande?")) return;
-            try {
-              const r = await fetch(`/api/orders/${btn.dataset.order}`, { method: "DELETE" });
-              if (r.ok) refreshMyOrders();
-              else {
-                const data = await r.json();
-                alert(data.error || "Impossible d'annuler");
-              }
-            } catch { alert("Erreur."); }
-          });
-        });
-
-        container.querySelectorAll(".reorder-btn").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            const orderId = btn.dataset.orderId;
-            const order = allOrders.find((o) => o.id == orderId);
-            if (!order) return;
-            for (const item of order.items || []) {
-              addToCart(item.article_no, item.description, item.prix, item.localisation);
-            }
-            renderCart();
-            // Close history, open cart
-            historyModal.classList.remove("open");
-            cartModal.classList.add("open");
-          });
-        });
-
-        container.querySelectorAll("[data-toggle]").forEach((header) => {
-          header.addEventListener("click", (e) => {
-            if (e.target.closest(".cancel-link") || e.target.closest(".reorder-btn")) return;
-            const num = header.dataset.toggle;
-            const detail = document.getElementById(`order-detail-${num}`);
-            const arrow = header.querySelector(".expand-arrow");
-            if (detail.style.display === "none") {
-              detail.style.display = "";
-              arrow.textContent = "\u25b4";
-            } else {
-              detail.style.display = "none";
-              arrow.textContent = "\u25be";
-            }
-          });
-        });
-      }
-    }
-  } catch (err) {
-    console.error("Failed to load orders:", err);
+    container.querySelectorAll("[data-toggle]").forEach((header) => {
+      header.addEventListener("click", (e) => {
+        if (e.target.closest(".cancel-link") || e.target.closest(".reorder-btn")) return;
+        const detail = document.getElementById(`order-detail-${header.dataset.toggle}`);
+        const arrow = header.querySelector(".expand-arrow");
+        if (detail.style.display === "none") { detail.style.display = ""; arrow.textContent = "\u25b4"; }
+        else { detail.style.display = "none"; arrow.textContent = "\u25be"; }
+      });
+    });
   }
 }
 
