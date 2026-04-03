@@ -578,7 +578,7 @@ function renderMyOrderCard(order, statusText, statusCls, faded) {
         ${order.status === "ready" ? `<button class="dismiss-btn" data-order="${order.order_number}">OK</button>` : ""}
         <span class="expand-arrow">&#9662;</span>
       </div>
-      <div class="my-order-items" id="order-detail-${order.order_number}" style="display:none;">
+      <div class="my-order-items" data-detail="${order.order_number}" style="display:none;">
         ${detail}
         <div class="my-order-actions">
           ${order.status === "pending" ? `<button class="cancel-link" data-order="${order.order_number}">Annuler la demande</button>` : ""}
@@ -687,7 +687,8 @@ function renderOrderLists() {
     container.querySelectorAll("[data-toggle]").forEach((header) => {
       header.addEventListener("click", (e) => {
         if (e.target.closest(".cancel-link") || e.target.closest(".reorder-btn") || e.target.closest(".dismiss-btn")) return;
-        const detail = document.getElementById(`order-detail-${header.dataset.toggle}`);
+        const detail = header.parentElement.querySelector(`[data-detail="${header.dataset.toggle}"]`);
+        if (!detail) return;
         const arrow = header.querySelector(".expand-arrow");
         if (detail.style.display === "none") { detail.style.display = ""; arrow.textContent = "\u25b4"; }
         else { detail.style.display = "none"; arrow.textContent = "\u25be"; }
