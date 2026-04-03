@@ -1,3 +1,8 @@
+// ── PWA ──
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {});
+}
+
 // ── State ──
 let searchTimer = null;
 let searchController = null;
@@ -533,7 +538,7 @@ async function refreshMyOrders() {
     const allOrders = await res.json();
 
     const active = allOrders.filter((o) => o.status !== "picked_up" && o.status !== "cancelled");
-    const history = allOrders.filter((o) => o.status === "picked_up" || o.status === "cancelled").slice(0, 5);
+    const history = allOrders.filter((o) => o.status === "picked_up" || o.status === "cancelled");
 
     let activeHtml = "";
     let historyHtml = "";

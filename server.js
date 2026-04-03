@@ -261,32 +261,38 @@ Après avoir vu les résultats:
 
 Tu parles en français québécois naturel. Sois bref dans tes réponses.`;
 
+// Deduplicate items by description, sum quantities, filter available
+function deduplicateResults(items, limit = 25) {
+  const seen = new Map();
+  for (const item of items) {
+    if (!isValidItem(item)) continue;
+    const desc = (item["Description"] || "").trim();
+    if (seen.has(desc)) {
+      const existing = seen.get(desc);
+      existing["Disponible"] = String((parseInt(existing["Disponible"]) || 0) + (parseInt(item["Disponible"]) || 0));
+      existing["Quantité"] = String((parseInt(existing["Quantité"]) || 0) + (parseInt(item["Quantité"]) || 0));
+    } else {
+      seen.set(desc, { ...item });
+    }
+  }
+  return [...seen.values()].filter((i) => (parseInt(i["Disponible"]) || 0) > 0).slice(0, limit);
+}
+
+// Get order with items helper
+function getOrderWithItems(orderNumber) {
+  const order = db.prepare("SELECT * FROM orders WHERE order_number = ?").get(orderNumber);
+  if (!order) return null;
+  order.items = db.prepare("SELECT * FROM order_items WHERE order_id = ?").all(order.id);
+  return order;
+}
+
 // ── Search API (public — students don't need auth) ──
 app.post("/api/search", searchLimiter, async (req, res) => {
   try {
     const { query } = req.body;
     if (!query) return res.status(400).json({ error: "Query requis" });
-    // Search wider, then deduplicate by description
     const raw = await hybridSearch(query, 50);
-    const seen = new Map();
-    for (const item of raw) {
-      if (!isValidItem(item)) continue;
-      const desc = (item["Description"] || "").trim();
-      if (seen.has(desc)) {
-        // Merge: sum disponible
-        const existing = seen.get(desc);
-        existing["Disponible"] = String(
-          (parseInt(existing["Disponible"]) || 0) + (parseInt(item["Disponible"]) || 0)
-        );
-        existing["Quantité"] = String(
-          (parseInt(existing["Quantité"]) || 0) + (parseInt(item["Quantité"]) || 0)
-        );
-      } else {
-        seen.set(desc, { ...item });
-      }
-    }
-    const final = [...seen.values()].filter((i) => (parseInt(i["Disponible"]) || 0) > 0);
-    res.json(final.slice(0, 25));
+    res.json(deduplicateResults(raw));
   } catch (err) {
     console.error("Search failed:", err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -525,16 +531,9 @@ app.get("/api/orders/by-da/:da", apiLimiter, (req, res) => {
 });
 
 app.get("/api/orders/:number", apiLimiter, (req, res) => {
-  const order = db.prepare(
-    "SELECT * FROM orders WHERE order_number = ?"
-  ).get(req.params.number);
+  const order = getOrderWithItems(req.params.number);
   if (!order) return res.status(404).json({ error: "Commande introuvable" });
-
-  const items = db.prepare(
-    "SELECT * FROM order_items WHERE order_id = ?"
-  ).all(order.id);
-
-  res.json({ ...order, items });
+  res.json(order);
 });
 
 app.delete("/api/orders/:number", apiLimiter, (req, res) => {
@@ -703,21 +702,7 @@ app.post("/api/search/photo", searchLimiter, visualSearchUpload.single("photo"),
 
     // Search inventory with those keywords
     const raw = await hybridSearch(keywords, 50);
-    const seen = new Map();
-    for (const item of raw) {
-      if (!isValidItem(item)) continue;
-      const desc = (item["Description"] || "").trim();
-      if (seen.has(desc)) {
-        const existing = seen.get(desc);
-        existing["Disponible"] = String((parseInt(existing["Disponible"]) || 0) + (parseInt(item["Disponible"]) || 0));
-        existing["Quantité"] = String((parseInt(existing["Quantité"]) || 0) + (parseInt(item["Quantité"]) || 0));
-      } else {
-        seen.set(desc, { ...item });
-      }
-    }
-
-    const finalResults = [...seen.values()].filter((i) => (parseInt(i["Disponible"]) || 0) > 0);
-    res.json({ keywords, results: finalResults.slice(0, 25) });
+    res.json({ keywords, results: deduplicateResults(raw) });
   } catch (err) {
     console.error("Visual search failed:", err);
     res.status(500).json({ error: "Erreur serveur" });
