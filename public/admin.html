@@ -4,19 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Magasin TGE - Commandes</title>
+  <link rel="stylesheet" href="/design.css">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    body {
-      font-family: -apple-system, system-ui, BlinkMacSystemFont, sans-serif;
-      background: #f5f5f5;
-      color: #1a1a1a;
-      min-height: 100vh;
-    }
-
     header {
-      background: #fff;
-      border-bottom: 2px solid #e5e5e5;
+      background: var(--color-primary);
+      color: #fff;
+      border-bottom: none;
       padding: 0 1.25rem;
       height: 56px;
       display: flex;
@@ -35,36 +28,26 @@
     header .spacer { flex: 1; }
 
     header a {
-      color: #666;
+      color: rgba(255, 255, 255, 0.7);
       text-decoration: none;
       font-size: 0.8rem;
     }
 
-    header a:hover { color: #0066cc; }
+    header a:hover { color: #fff; }
 
-    #logout-btn {
+    #logout-btn, #sound-toggle {
       padding: 0.25rem 0.7rem;
-      border: 1px solid #d1d1d1;
-      border-radius: 4px;
-      background: #fff;
-      color: #666;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.8);
       font-size: 0.75rem;
       cursor: pointer;
     }
 
-    #logout-btn:hover { border-color: #c62828; color: #c62828; }
+    #logout-btn:hover, #sound-toggle:hover { background: rgba(255, 255, 255, 0.2); color: #fff; }
 
-    #sound-toggle {
-      padding: 0.25rem 0.7rem;
-      border: 1px solid #d1d1d1;
-      border-radius: 4px;
-      background: #fff;
-      color: #666;
-      font-size: 0.75rem;
-      cursor: pointer;
-    }
-
-    #sound-toggle.active { border-color: #2e7d32; color: #2e7d32; }
+    #sound-toggle.active { border-color: var(--color-success); color: #4ade80; }
 
     main {
       max-width: 800px;
@@ -80,8 +63,8 @@
 
     .stat-card {
       flex: 1;
-      background: #fff;
-      border: 1px solid #e5e5e5;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
       border-radius: 6px;
       padding: 0.85rem;
       text-align: center;
@@ -95,15 +78,15 @@
 
     .stat-card .label {
       font-size: 0.7rem;
-      color: #888;
+      color: var(--color-text-muted);
       margin-top: 0.15rem;
       text-transform: uppercase;
       letter-spacing: 0.03em;
     }
 
     .stat-card.pending .num { color: #e65100; }
-    .stat-card.preparing .num { color: #0066cc; }
-    .stat-card.ready .num { color: #2e7d32; }
+    .stat-card.preparing .num { color: var(--color-accent); }
+    .stat-card.ready .num { color: var(--color-success); }
 
     .section-title {
       font-size: 0.75rem;
@@ -113,12 +96,12 @@
       font-weight: 600;
       margin: 1.25rem 0 0.5rem;
       padding-bottom: 0.4rem;
-      border-bottom: 1px solid #e5e5e5;
+      border-bottom: 1px solid var(--color-border);
     }
 
     .order-card {
-      background: #fff;
-      border: 1px solid #e5e5e5;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
       border-radius: 6px;
       padding: 0.85rem 1rem;
       margin-bottom: 0.5rem;
@@ -140,14 +123,14 @@
     .order-card .student-info {
       flex: 1;
       font-size: 0.85rem;
-      color: #888;
+      color: var(--color-text-muted);
     }
 
-    .order-card .student-info strong { color: #333; }
+    .order-card .student-info strong { color: var(--color-text); }
 
     .order-card .order-time {
       font-size: 0.75rem;
-      color: #aaa;
+      color: var(--color-text-faint);
     }
 
     .order-card .order-items {
@@ -158,17 +141,17 @@
     }
 
     .order-card .order-item-chip {
-      background: #f5f5f5;
-      border: 1px solid #e5e5e5;
+      background: var(--color-input-bg);
+      border: 1px solid var(--color-border);
       border-radius: 4px;
       padding: 0.2rem 0.5rem;
       font-size: 0.75rem;
-      color: #555;
+      color: var(--color-text-secondary);
     }
 
     .order-card .order-item-chip .qty {
       font-weight: 700;
-      color: #333;
+      color: var(--color-text);
     }
 
     .order-card .actions {
@@ -187,22 +170,22 @@
 
     .order-card .actions button:hover { opacity: 0.85; }
 
-    .btn-prepare { background: #0066cc; color: #fff; }
-    .btn-ready { background: #2e7d32; color: #fff; }
+    .btn-prepare { background: var(--color-accent); color: #fff; }
+    .btn-ready { background: var(--color-success); color: #fff; }
     .btn-pickup { background: #5e35b1; color: #fff; }
 
     .btn-cancel-order {
-      background: #fff;
-      border: 1px solid #d1d1d1 !important;
-      color: #888;
+      background: var(--color-surface);
+      border: 1px solid var(--color-input-border) !important;
+      color: var(--color-text-muted);
     }
 
-    .btn-cancel-order:hover { border-color: #c62828 !important; color: #c62828; }
+    .btn-cancel-order:hover { border-color: var(--color-danger) !important; color: var(--color-danger); }
 
     .empty-section {
       text-align: center;
       padding: 2.5rem;
-      color: #ccc;
+      color: var(--color-text-placeholder);
       font-size: 0.85rem;
     }
 
@@ -215,8 +198,8 @@
       letter-spacing: 0.03em;
     }
 
-    .status-done { background: #e8f5e9; color: #2e7d32; }
-    .status-cancelled { background: #fce4ec; color: #c62828; }
+    .status-done { background: var(--color-success-bg); color: var(--color-success); }
+    .status-cancelled { background: var(--color-danger-light); color: var(--color-danger); }
 
     @media (max-width: 640px) {
       header { padding: 0 0.75rem; height: 48px; gap: 0.5rem; }

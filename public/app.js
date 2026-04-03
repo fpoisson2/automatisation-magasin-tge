@@ -324,7 +324,7 @@ async function loadItemExtras(articleNo, card) {
   } catch {}
 }
 
-// ── Cart FAB + modal ──
+// ── Cart FAB + modal (mobile) ──
 document.getElementById("cart-fab-btn").addEventListener("click", () => {
   cartModal.classList.add("open");
   renderCart();
@@ -334,6 +334,15 @@ document.getElementById("cart-modal-close").addEventListener("click", () => {
 });
 cartModal.addEventListener("click", (e) => {
   if (e.target === cartModal) cartModal.classList.remove("open");
+});
+
+// ── Cart sidebar submit (desktop) ──
+const cartSidebar = document.getElementById("cart-sidebar");
+const cartSidebarItems = document.getElementById("cart-sidebar-items");
+const cartSidebarCount = document.getElementById("cart-sidebar-count");
+
+document.getElementById("submit-order-sidebar").addEventListener("click", () => {
+  submitOrderBtn.click();
 });
 
 // ── Cart logic ──
@@ -376,42 +385,53 @@ function renderCart() {
   if (cart.length === 0) {
     cartFab.classList.remove("visible");
     cartModal.classList.remove("open");
+    cartSidebar.classList.remove("has-items");
+    document.querySelector(".page-layout").classList.remove("cart-open");
+    cartSidebarItems.innerHTML = "";
     return;
   }
 
   cartFab.classList.add("visible");
   cartBadge.textContent = totalItems;
 
-  cartItemsEl.innerHTML = "";
-  cart.forEach((item) => {
-    const row = document.createElement("div");
-    row.className = "cart-item";
-    row.innerHTML = `
-      <div class="cart-item-info">
-        <div class="cart-item-no">#${item.article_no}</div>
-        <div class="cart-item-desc">${item.description}</div>
-      </div>
-      <div class="qty-control">
-        <button class="qty-btn" data-article="${item.article_no}" data-delta="-1">-</button>
-        <span class="qty-val">${item.quantity}</span>
-        <button class="qty-btn" data-article="${item.article_no}" data-delta="1">+</button>
-      </div>
-      <button class="remove-btn" data-article="${item.article_no}">&times;</button>
-    `;
-    cartItemsEl.appendChild(row);
-  });
+  // Sidebar (desktop)
+  cartSidebar.classList.add("has-items");
+  document.querySelector(".page-layout").classList.add("cart-open");
+  cartSidebarCount.textContent = `(${totalItems})`;
 
-  cartItemsEl.querySelectorAll(".qty-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      updateCartQty(btn.dataset.article, parseInt(btn.dataset.delta));
+  // Render items into both containers
+  for (const container of [cartItemsEl, cartSidebarItems]) {
+    container.innerHTML = "";
+    cart.forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "cart-item";
+      row.innerHTML = `
+        <div class="cart-item-info">
+          <div class="cart-item-no">#${item.article_no}</div>
+          <div class="cart-item-desc">${item.description}</div>
+        </div>
+        <div class="qty-control">
+          <button class="qty-btn" data-article="${item.article_no}" data-delta="-1">-</button>
+          <span class="qty-val">${item.quantity}</span>
+          <button class="qty-btn" data-article="${item.article_no}" data-delta="1">+</button>
+        </div>
+        <button class="remove-btn" data-article="${item.article_no}">&times;</button>
+      `;
+      container.appendChild(row);
     });
-  });
 
-  cartItemsEl.querySelectorAll(".remove-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      removeFromCart(btn.dataset.article);
+    container.querySelectorAll(".qty-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        updateCartQty(btn.dataset.article, parseInt(btn.dataset.delta));
+      });
     });
-  });
+
+    container.querySelectorAll(".remove-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        removeFromCart(btn.dataset.article);
+      });
+    });
+  }
 }
 
 // ── Order tracking ──
@@ -515,12 +535,14 @@ function renderMyOrderCard(order, statusText, statusCls, faded) {
         <div class="order-num">#${order.order_number}</div>
         <span class="order-status ${statusCls}">${statusText}</span>
         <div class="order-detail">${summary}</div>
-        ${order.status === "pending" ? `<button class="cancel-link" data-order="${order.order_number}">Annuler</button>` : ""}
-        ${faded ? `<button class="reorder-btn" data-order-id="${order.id}">Recommander</button>` : ""}
         <span class="expand-arrow">&#9662;</span>
       </div>
       <div class="my-order-items" id="order-detail-${order.order_number}" style="display:none;">
         ${detail}
+        <div class="my-order-actions">
+          ${order.status === "pending" ? `<button class="cancel-link" data-order="${order.order_number}">Annuler la demande</button>` : ""}
+          ${faded ? `<button class="reorder-btn" data-order-id="${order.id}">Recommander</button>` : ""}
+        </div>
       </div>
     </div>
   `;
