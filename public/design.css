@@ -9,6 +9,7 @@
   --color-success: #2e7d32;
   --color-success-light: #d4edda;
   --color-success-bg: #e8f5e9;
+  --color-success-dark: #155724;
   --color-danger: #c62828;
   --color-danger-light: #fce4ec;
   --color-danger-border: #e57373;
@@ -155,7 +156,7 @@ body {
 
 .badge-pending { background: var(--color-warning-bg); color: var(--color-warning-text); }
 .badge-preparing { background: var(--color-info-bg); color: var(--color-info-text); }
-.badge-ready { background: var(--color-success-light); color: #155724; }
+.badge-ready { background: var(--color-success-light); color: var(--color-success-dark); }
 .badge-done { background: var(--color-success-bg); color: var(--color-success); }
 .badge-cancelled { background: var(--color-danger-light); color: var(--color-danger); }
 

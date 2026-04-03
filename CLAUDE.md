@@ -37,6 +37,7 @@ systemctl restart magasin-tge embedding-server  # Redémarrer les services
 - Layout : `--header-height`, `--sidebar-width`, `--content-max-width`
 - Composants réutilisables : `.btn`, `.btn-primary`, `.btn-secondary`, `.card`, `.badge`, `.badge-pending`, `.input`, `.modal-overlay`, `.modal`, `.mono`
 - Ne jamais écrire `#1a1a2e` ou `#0066cc` directement — utiliser `var(--color-primary)` ou `var(--color-accent)`
+- **Si une nouvelle couleur est nécessaire, l'ajouter d'abord dans `:root` de `design.css` avec un nom sémantique, puis l'utiliser via `var(--color-xxx)`** — ne jamais mettre de valeur hex directement dans les HTML ou JS
 - Pour changer le thème de l'app, modifier uniquement les variables dans `:root` de `design.css`
 
 ## Conventions
