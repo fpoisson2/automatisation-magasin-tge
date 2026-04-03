@@ -575,13 +575,13 @@ function renderMyOrderCard(order, statusText, statusCls, faded) {
         <span class="order-status ${statusCls}">${statusText}</span>
         ${faded ? `<span style="font-size:var(--font-size-xs);color:var(--color-text-faint);">${date}</span>` : ""}
         <div class="order-detail">${summary}</div>
+        ${order.status === "ready" ? `<button class="dismiss-btn" data-order="${order.order_number}">OK</button>` : ""}
         <span class="expand-arrow">&#9662;</span>
       </div>
       <div class="my-order-items" id="order-detail-${order.order_number}" style="display:none;">
         ${detail}
         <div class="my-order-actions">
           ${order.status === "pending" ? `<button class="cancel-link" data-order="${order.order_number}">Annuler la demande</button>` : ""}
-          ${order.status === "ready" ? `<button class="dismiss-btn" data-order="${order.order_number}">OK, bien re\u00e7u</button>` : ""}
           ${faded ? `<button class="reorder-btn" data-order-id="${order.id}">Recommander</button>` : ""}
         </div>
       </div>
@@ -686,7 +686,7 @@ function renderOrderLists() {
 
     container.querySelectorAll("[data-toggle]").forEach((header) => {
       header.addEventListener("click", (e) => {
-        if (e.target.closest(".cancel-link") || e.target.closest(".reorder-btn")) return;
+        if (e.target.closest(".cancel-link") || e.target.closest(".reorder-btn") || e.target.closest(".dismiss-btn")) return;
         const detail = document.getElementById(`order-detail-${header.dataset.toggle}`);
         const arrow = header.querySelector(".expand-arrow");
         if (detail.style.display === "none") { detail.style.display = ""; arrow.textContent = "\u25b4"; }
