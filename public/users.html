@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Magasin TGE - Utilisateurs</title>
+  <link rel="stylesheet" href="/design.css">
+  <style>
+    header {
+      background: var(--color-primary);
+      color: #fff;
+      padding: 0 var(--space-xl);
+      height: var(--header-height);
+      display: flex;
+      align-items: center;
+      gap: var(--space-lg);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    header h1 { font-size: var(--font-size-lg); font-weight: 700; }
+    header .spacer { flex: 1; }
+    header a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: var(--font-size-sm); }
+    header a:hover { color: #fff; }
+
+    main {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: var(--space-xl);
+    }
+
+    .user-row {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-md) var(--space-lg);
+      margin-bottom: var(--space-sm);
+      display: flex;
+      align-items: center;
+      gap: var(--space-md);
+    }
+
+    .user-row .user-info { flex: 1; }
+
+    .user-row .user-name {
+      font-weight: 600;
+      font-size: var(--font-size-base);
+    }
+
+    .user-row .user-meta {
+      font-size: var(--font-size-xs);
+      color: var(--color-text-muted);
+    }
+
+    .user-row .role-badge {
+      padding: var(--space-xs) var(--space-sm);
+      border-radius: var(--radius-pill);
+      font-size: var(--font-size-xs);
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .role-badge.admin { background: var(--color-primary); color: #fff; }
+    .role-badge.magasinier { background: var(--color-info-bg); color: var(--color-info-text); }
+
+    .user-row .delete-btn {
+      background: none;
+      border: none;
+      color: var(--color-text-faint);
+      cursor: pointer;
+      font-size: 1.2rem;
+      padding: var(--space-xs);
+    }
+
+    .user-row .delete-btn:hover { color: var(--color-danger); }
+
+    h2 {
+      font-size: var(--font-size-base);
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin: var(--space-xl) 0 var(--space-md);
+      padding-bottom: var(--space-sm);
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .add-form {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-lg);
+    }
+
+    .add-form .field {
+      margin-bottom: var(--space-md);
+    }
+
+    .add-form label {
+      display: block;
+      font-size: var(--font-size-sm);
+      color: var(--color-text-secondary);
+      margin-bottom: var(--space-xs);
+    }
+
+    .add-form input, .add-form select {
+      width: 100%;
+      padding: var(--space-sm) var(--space-md);
+      border: 1px solid var(--color-input-border);
+      border-radius: var(--radius-md);
+      font-size: var(--font-size-base);
+      outline: none;
+      font-family: var(--font-family);
+    }
+
+    .add-form input:focus, .add-form select:focus { border-color: var(--color-accent); }
+
+    .add-form .submit-btn {
+      width: 100%;
+      padding: var(--space-sm);
+      border: none;
+      border-radius: var(--radius-md);
+      background: var(--color-success);
+      color: #fff;
+      font-size: var(--font-size-base);
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .add-form .submit-btn:hover { background: #1b5e20; }
+
+    .msg {
+      font-size: var(--font-size-sm);
+      margin-top: var(--space-sm);
+      min-height: 1.2em;
+    }
+
+    .msg.error { color: var(--color-danger); }
+    .msg.ok { color: var(--color-success); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Utilisateurs</h1>
+    <div class="spacer"></div>
+    <a href="/admin">Commandes</a>
+    <a href="/admin/stats">Stats</a>
+  </header>
+
+  <main>
+    <div id="user-list"></div>
+
+    <h2>Ajouter un utilisateur</h2>
+    <div class="add-form">
+      <div class="field">
+        <label>Nom d'utilisateur</label>
+        <input type="text" id="new-username" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>Nom complet</label>
+        <input type="text" id="new-name" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>Mot de passe</label>
+        <input type="password" id="new-password">
+      </div>
+      <div class="field">
+        <label>R&#244;le</label>
+        <select id="new-role">
+          <option value="magasinier">Magasinier</option>
+          <option value="admin">Administrateur</option>
+        </select>
+      </div>
+      <button class="submit-btn" id="add-user-btn">Cr&#233;er le compte</button>
+      <div class="msg" id="form-msg"></div>
+    </div>
+  </main>
+
+  <script>
+    async function loadUsers() {
+      const res = await fetch("/api/admin/users");
+      if (res.status === 401 || res.status === 403) { window.location.href = "/login"; return; }
+      const users = await res.json();
+      const me = await (await fetch("/api/admin/me")).json();
+
+      document.getElementById("user-list").innerHTML = users.map((u) => `
+        <div class="user-row">
+          <div class="user-info">
+            <div class="user-name">${u.name || u.username}</div>
+            <div class="user-meta">@${u.username}</div>
+          </div>
+          <span class="role-badge ${u.role}">${u.role}</span>
+          ${u.id !== me.id ? `<button class="delete-btn" data-id="${u.id}" title="Supprimer">&times;</button>` : ""}
+        </div>
+      `).join("");
+
+      document.querySelectorAll(".delete-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          if (!confirm("Supprimer cet utilisateur?")) return;
+          await fetch(`/api/admin/users/${btn.dataset.id}`, { method: "DELETE" });
+          loadUsers();
+        });
+      });
+    }
+
+    document.getElementById("add-user-btn").addEventListener("click", async () => {
+      const msg = document.getElementById("form-msg");
+      const username = document.getElementById("new-username").value.trim();
+      const name = document.getElementById("new-name").value.trim();
+      const password = document.getElementById("new-password").value;
+      const role = document.getElementById("new-role").value;
+
+      if (!username || !password) {
+        msg.textContent = "Nom d'utilisateur et mot de passe requis.";
+        msg.className = "msg error";
+        return;
+      }
+
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, name: name || username, password, role }),
+      });
+
+      if (res.ok) {
+        msg.textContent = "Compte cr\u00e9\u00e9!";
+        msg.className = "msg ok";
+        document.getElementById("new-username").value = "";
+        document.getElementById("new-name").value = "";
+        document.getElementById("new-password").value = "";
+        loadUsers();
+      } else {
+        const data = await res.json();
+        msg.textContent = data.error || "Erreur";
+        msg.className = "msg error";
+      }
+    });
+
+    loadUsers();
+  </script>
+</body>
+</html>

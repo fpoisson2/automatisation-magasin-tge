@@ -160,6 +160,14 @@ function renderOrderCard(order, actions, badgeHtml = "") {
   `;
 }
 
+// Show admin-only links
+fetch("/api/admin/me").then((r) => r.json()).then((me) => {
+  if (me.role === "admin") {
+    const link = document.getElementById("users-link");
+    if (link) link.style.display = "";
+  }
+}).catch(() => {});
+
 // ── SSE connection ──
 fetchOrders();
 

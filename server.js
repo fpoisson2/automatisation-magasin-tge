@@ -622,6 +622,10 @@ app.get("/admin/stats", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "stats.html"));
 });
 
+app.get("/admin/users", requireAdmin, (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "users.html"));
+});
+
 app.use("/admin.js", requireAuth, express.static(path.join(__dirname, "public", "admin.js")));
 app.use("/stats.js", requireAuth, express.static(path.join(__dirname, "public", "stats.js")));
 
