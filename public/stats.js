@@ -1,8 +1,8 @@
 async function loadStats() {
   try {
-  const res = await fetch("/api/admin/stats");
+  const res = await fetch("/api/admin/stats", { credentials: "same-origin" });
   if (res.status === 401) { window.location.href = "/login"; return; }
-  if (!res.ok) { document.getElementById("summary").textContent = "Erreur de chargement"; return; }
+  if (!res.ok) { document.getElementById("summary").innerHTML = `<div class="stat-big"><div class="label">Erreur ${res.status}: ${await res.text()}</div></div>`; return; }
   const stats = await res.json();
 
   // Summary cards

@@ -164,6 +164,15 @@
     </table>
   </main>
 
+  <script>
+    // Force clear old service worker cache
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        regs.forEach((r) => r.update());
+      });
+      caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+    }
+  </script>
   <script src="stats.js"></script>
 </body>
 </html>
