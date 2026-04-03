@@ -1,7 +1,7 @@
 // ── State ──
 let searchTimer = null;
 let searchController = null;
-let cart = [];
+let cart = JSON.parse(localStorage.getItem("cart") || "[]");
 let lastOrderNumber = null;
 let orderPollTimer = null;
 let studentDA = localStorage.getItem("studentDA") || "";
@@ -90,9 +90,10 @@ historyModal.addEventListener("click", (e) => {
   if (e.target === historyModal) historyModal.classList.remove("open");
 });
 
-const cartBar = document.getElementById("cart-bar");
+const cartFab = document.getElementById("cart-fab");
+const cartBadge = document.getElementById("cart-badge");
 const cartItemsEl = document.getElementById("cart-items");
-const cartCountEl = document.getElementById("cart-count");
+const cartModal = document.getElementById("cart-modal");
 const submitOrderBtn = document.getElementById("submit-order-btn");
 const submitModal = document.getElementById("submit-modal");
 
@@ -248,16 +249,19 @@ function displayResults(items) {
       <div class="card-header">
         <div class="article-no">#${articleNo}</div>
         ${dispo > 0 ? `
-          <button class="add-btn ${inCart ? "added" : ""}" data-article="${articleNo}" data-desc="${item["Description"]}" data-prix="${item["Prix"]}" data-loc="${item["Localisation"] || ""}">
-            ${inCart ? "\u2713" : "+"}
-          </button>
+          <div class="card-qty-control" data-article="${articleNo}" data-desc="${item["Description"]}" data-prix="${item["Prix"]}" data-loc="${item["Localisation"] || ""}">
+            ${inCart
+              ? `<button class="qty-minus">-</button><span class="qty-val">${inCart.quantity}</span><button class="qty-plus">+</button>`
+              : `<button class="add-btn">+</button>`
+            }
+          </div>
         ` : ""}
       </div>
       <div class="description">${item["Description"]}${freq > 0 ? ` <span style="font-size:0.7rem;color:#888;font-style:italic;">(command\u00e9 ${freq}x)</span>` : ""}</div>
       <div class="meta">
         <span class="${dispo === 0 ? "out-of-stock" : ""}">Dispo: <strong>${dispo}</strong></span>
-        <span class="card-doc-slot"></span>
       </div>
+      <div class="card-doc-slot"></div>
     `;
     resultsEl.appendChild(card);
 
@@ -265,18 +269,40 @@ function displayResults(items) {
     loadItemExtras(articleNo, card);
   });
 
-  // Add-to-cart buttons
-  resultsEl.querySelectorAll(".add-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const articleNo = btn.dataset.article;
-      const desc = btn.dataset.desc;
-      const prix = btn.dataset.prix;
-      const loc = btn.dataset.loc;
-      addToCart(articleNo, desc, prix, loc);
-      btn.classList.add("added");
-      btn.textContent = "\u2713";
+  // Bind quantity controls
+  bindCardQtyControls();
+}
+
+function bindCardQtyControls() {
+  resultsEl.querySelectorAll(".card-qty-control").forEach((ctrl) => {
+    if (ctrl.dataset.bound) return;
+    ctrl.dataset.bound = "1";
+
+    ctrl.addEventListener("click", (e) => {
+      const articleNo = ctrl.dataset.article;
+      const target = e.target;
+
+      if (target.classList.contains("add-btn") || target.classList.contains("qty-plus")) {
+        addToCart(articleNo, ctrl.dataset.desc, ctrl.dataset.prix, ctrl.dataset.loc);
+      } else if (target.classList.contains("qty-minus")) {
+        updateCartQty(articleNo, -1);
+      } else {
+        return;
+      }
+
+      renderCardQty(ctrl, articleNo);
     });
   });
+}
+
+function renderCardQty(ctrl, articleNo) {
+  const inCart = cart.find((c) => c.article_no === articleNo);
+  if (inCart && inCart.quantity > 0) {
+    ctrl.innerHTML = `<button class="qty-minus">-</button><span class="qty-val">${inCart.quantity}</span><button class="qty-plus">+</button>`;
+  } else {
+    ctrl.innerHTML = `<button class="add-btn">+</button>`;
+  }
+  renderCart();
 }
 
 async function loadItemExtras(articleNo, card) {
@@ -293,6 +319,18 @@ async function loadItemExtras(articleNo, card) {
   } catch {}
 }
 
+// ── Cart FAB + modal ──
+document.getElementById("cart-fab-btn").addEventListener("click", () => {
+  cartModal.classList.add("open");
+  renderCart();
+});
+document.getElementById("cart-modal-close").addEventListener("click", () => {
+  cartModal.classList.remove("open");
+});
+cartModal.addEventListener("click", (e) => {
+  if (e.target === cartModal) cartModal.classList.remove("open");
+});
+
 // ── Cart logic ──
 function addToCart(articleNo, description, prix, localisation) {
   const existing = cart.find((c) => c.article_no === articleNo);
@@ -307,13 +345,12 @@ function addToCart(articleNo, description, prix, localisation) {
 function removeFromCart(articleNo) {
   cart = cart.filter((c) => c.article_no !== articleNo);
   renderCart();
-  // Update add buttons in results
-  resultsEl.querySelectorAll(".add-btn").forEach((btn) => {
-    if (btn.dataset.article === articleNo) {
-      btn.classList.remove("added");
-      btn.textContent = "+";
-    }
-  });
+  // Reset card control back to "+"
+  const ctrl = resultsEl.querySelector(`.card-qty-control[data-article="${articleNo}"]`);
+  if (ctrl) {
+    ctrl.innerHTML = `<button class="add-btn">+</button>`;
+    bindCardQtyControls();
+  }
 }
 
 function updateCartQty(articleNo, delta) {
@@ -328,33 +365,35 @@ function updateCartQty(articleNo, delta) {
 }
 
 function renderCart() {
+  localStorage.setItem("cart", JSON.stringify(cart));
+  const totalItems = cart.reduce((sum, c) => sum + c.quantity, 0);
+
   if (cart.length === 0) {
-    cartBar.classList.remove("visible");
+    cartFab.classList.remove("visible");
+    cartModal.classList.remove("open");
     return;
   }
 
-  cartBar.classList.add("visible");
-
-  const totalItems = cart.reduce((sum, c) => sum + c.quantity, 0);
-  cartCountEl.textContent = `${totalItems} article${totalItems > 1 ? "s" : ""}`;
+  cartFab.classList.add("visible");
+  cartBadge.textContent = totalItems;
 
   cartItemsEl.innerHTML = "";
   cart.forEach((item) => {
-    const chip = document.createElement("div");
-    chip.className = "cart-chip";
-    chip.innerHTML = `
-      <div class="chip-top">
-        <span>#${item.article_no}</span>
-        <div class="qty-control">
-          <button class="qty-btn" data-article="${item.article_no}" data-delta="-1">-</button>
-          <span>${item.quantity}</span>
-          <button class="qty-btn" data-article="${item.article_no}" data-delta="1">+</button>
-        </div>
-        <button class="remove-btn" data-article="${item.article_no}">&times;</button>
+    const row = document.createElement("div");
+    row.className = "cart-item";
+    row.innerHTML = `
+      <div class="cart-item-info">
+        <div class="cart-item-no">#${item.article_no}</div>
+        <div class="cart-item-desc">${item.description}</div>
       </div>
-      <div class="chip-desc">${item.description}</div>
+      <div class="qty-control">
+        <button class="qty-btn" data-article="${item.article_no}" data-delta="-1">-</button>
+        <span class="qty-val">${item.quantity}</span>
+        <button class="qty-btn" data-article="${item.article_no}" data-delta="1">+</button>
+      </div>
+      <button class="remove-btn" data-article="${item.article_no}">&times;</button>
     `;
-    cartItemsEl.appendChild(chip);
+    cartItemsEl.appendChild(row);
   });
 
   cartItemsEl.querySelectorAll(".qty-btn").forEach((btn) => {
@@ -530,7 +569,7 @@ async function refreshMyOrders() {
       for (const container of [myOrdersEl, myHistoryEl]) {
         container.querySelectorAll(".cancel-link").forEach((btn) => {
           btn.addEventListener("click", async () => {
-            if (!confirm("\u00cates-vous s\u00fbr de vouloir annuler cette demande?")) return;
+            if (!await confirmAction("\u00cates-vous s\u00fbr de vouloir annuler cette demande?")) return;
             try {
               const r = await fetch(`/api/orders/${btn.dataset.order}`, { method: "DELETE" });
               if (r.ok) refreshMyOrders();
@@ -551,6 +590,9 @@ async function refreshMyOrders() {
               addToCart(item.article_no, item.description, item.prix, item.localisation);
             }
             renderCart();
+            // Close history, open cart
+            historyModal.classList.remove("open");
+            cartModal.classList.add("open");
           });
         });
 
@@ -576,10 +618,32 @@ async function refreshMyOrders() {
   }
 }
 
-// Init: request notifications, connect SSE, load orders
+// Init: request notifications, connect SSE, load orders, restore cart
 requestNotifPermission();
 refreshMyOrders();
 connectSSE();
+if (cart.length > 0) renderCart();
+
+// ── Confirm modal ──
+function confirmAction(msg) {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById("confirm-modal");
+    document.getElementById("confirm-msg").textContent = msg;
+    overlay.classList.add("open");
+
+    const yes = document.getElementById("confirm-yes");
+    const no = document.getElementById("confirm-no");
+
+    function cleanup() {
+      overlay.classList.remove("open");
+      yes.replaceWith(yes.cloneNode(true));
+      no.replaceWith(no.cloneNode(true));
+    }
+
+    document.getElementById("confirm-yes").addEventListener("click", () => { cleanup(); resolve(true); });
+    document.getElementById("confirm-no").addEventListener("click", () => { cleanup(); resolve(false); });
+  });
+}
 
 // ── Order submission ──
 submitOrderBtn.addEventListener("click", () => {
@@ -594,6 +658,7 @@ submitOrderBtn.addEventListener("click", () => {
       `<div class="summary-item"><span>#${item.article_no} — ${item.description.substring(0, 40)}</span><span>x${item.quantity}</span></div>`
     ).join("");
 
+  cartModal.classList.remove("open");
   submitModal.classList.add("open");
 });
 
@@ -639,11 +704,11 @@ document.getElementById("modal-confirm").addEventListener("click", async () => {
 
     cart = [];
     renderCart();
-    // Reset all add buttons back to "+"
-    resultsEl.querySelectorAll(".add-btn.added").forEach((btn) => {
-      btn.classList.remove("added");
-      btn.textContent = "+";
+    // Reset all card qty controls back to "+"
+    resultsEl.querySelectorAll(".card-qty-control").forEach((ctrl) => {
+      ctrl.innerHTML = `<button class="add-btn">+</button>`;
     });
+    bindCardQtyControls();
   } catch (err) {
     alert("Erreur lors de la soumission. R\u00e9essayez.");
     console.error(err);
@@ -655,7 +720,7 @@ document.getElementById("modal-confirm").addEventListener("click", async () => {
 
 document.getElementById("cancel-order-btn").addEventListener("click", async () => {
   if (!lastOrderNumber) return;
-  if (!confirm("Êtes-vous sûr de vouloir annuler votre demande?")) return;
+  if (!await confirmAction("\u00cates-vous s\u00fbr de vouloir annuler votre demande?")) return;
 
   try {
     const res = await fetch(`/api/orders/${lastOrderNumber}`, { method: "DELETE" });

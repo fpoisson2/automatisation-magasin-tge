@@ -286,7 +286,7 @@ app.post("/api/search", searchLimiter, async (req, res) => {
       }
     }
     const final = [...seen.values()].filter((i) => (parseInt(i["Disponible"]) || 0) > 0);
-    res.json(final.slice(0, 10));
+    res.json(final.slice(0, 25));
   } catch (err) {
     console.error("Search failed:", err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -717,7 +717,7 @@ app.post("/api/search/photo", searchLimiter, visualSearchUpload.single("photo"),
     }
 
     const finalResults = [...seen.values()].filter((i) => (parseInt(i["Disponible"]) || 0) > 0);
-    res.json({ keywords, results: finalResults.slice(0, 10) });
+    res.json({ keywords, results: finalResults.slice(0, 25) });
   } catch (err) {
     console.error("Visual search failed:", err);
     res.status(500).json({ error: "Erreur serveur" });
