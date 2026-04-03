@@ -575,7 +575,7 @@ function renderMyOrderCard(order, statusText, statusCls, faded) {
         <span class="order-status ${statusCls}">${statusText}</span>
         ${faded ? `<span style="font-size:var(--font-size-xs);color:var(--color-text-faint);">${date}</span>` : ""}
         <div class="order-detail">${summary}</div>
-        ${order.status === "ready" ? `<button class="dismiss-btn" data-order="${order.order_number}">OK</button>` : ""}
+        ${order.status === "ready" ? `<button class="dismiss-btn" data-order="${order.order_number}">Re\u00e7u \u2713</button>` : ""}
         <span class="expand-arrow">&#9662;</span>
       </div>
       <div class="my-order-items" data-detail="${order.order_number}" style="display:none;">
