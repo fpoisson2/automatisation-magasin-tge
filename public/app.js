@@ -9,6 +9,7 @@ let searchController = null;
 let cart = JSON.parse(localStorage.getItem("cart") || "[]");
 let lastOrderNumber = null;
 let orderPollTimer = null;
+let dismissedOrders = JSON.parse(localStorage.getItem("dismissedOrders") || "[]");
 let studentDA = localStorage.getItem("studentDA") || "";
 let studentName = localStorage.getItem("studentName") || "";
 let frequentArticles = new Map(); // article_no -> total_qty
@@ -557,6 +558,7 @@ function connectSSE() {
 }
 
 function renderMyOrderCard(order, statusText, statusCls, faded) {
+  const date = order.created_at ? new Date(order.created_at + "Z").toLocaleDateString("fr-CA", { day: "numeric", month: "short" }) : "";
   const summary = (order.items || []).map((i) => `${i.quantity}x #${i.article_no}`).join(", ");
   const detail = (order.items || []).map((i) =>
     `<div class="order-item-row">
@@ -571,6 +573,7 @@ function renderMyOrderCard(order, statusText, statusCls, faded) {
       <div class="my-order-header" data-toggle="${order.order_number}">
         <div class="order-num">#${order.order_number}</div>
         <span class="order-status ${statusCls}">${statusText}</span>
+        ${faded ? `<span style="font-size:var(--font-size-xs);color:var(--color-text-faint);">${date}</span>` : ""}
         <div class="order-detail">${summary}</div>
         <span class="expand-arrow">&#9662;</span>
       </div>
@@ -578,6 +581,7 @@ function renderMyOrderCard(order, statusText, statusCls, faded) {
         ${detail}
         <div class="my-order-actions">
           ${order.status === "pending" ? `<button class="cancel-link" data-order="${order.order_number}">Annuler la demande</button>` : ""}
+          ${order.status === "ready" ? `<button class="dismiss-btn" data-order="${order.order_number}">OK, bien re\u00e7u</button>` : ""}
           ${faded ? `<button class="reorder-btn" data-order-id="${order.id}">Recommander</button>` : ""}
         </div>
       </div>
@@ -616,8 +620,13 @@ async function loadMoreHistory() {
 
 function renderOrderLists() {
   const allOrders = allOrdersCache;
-  const active = allOrders.filter((o) => o.status !== "picked_up" && o.status !== "cancelled");
-  const history = allOrders.filter((o) => o.status === "picked_up" || o.status === "cancelled");
+  const active = allOrders.filter((o) =>
+    o.status !== "picked_up" && o.status !== "cancelled" &&
+    !(o.status === "ready" && dismissedOrders.includes(o.order_number))
+  );
+  const history = allOrders.filter((o) =>
+    o.status === "picked_up" || o.status === "cancelled" || o.status === "ready"
+  );
 
   // Active at top of page
   if (active.length) {
@@ -630,7 +639,7 @@ function renderOrderLists() {
 
   // History in modal
   let historyHtml = history.map((o) => {
-    const t = o.status === "cancelled" ? "Annul\u00e9e" : "Termin\u00e9e";
+    const t = o.status === "cancelled" ? "Annul\u00e9e" : o.status === "ready" ? "Pr\u00eate" : "Termin\u00e9e";
     return renderMyOrderCard(o, t, "history", true);
   }).join("");
 
@@ -653,6 +662,14 @@ function renderOrderLists() {
           if (r.ok) refreshMyOrders();
           else { const d = await r.json(); alert(d.error || "Impossible d'annuler"); }
         } catch { alert("Erreur."); }
+      });
+    });
+
+    container.querySelectorAll(".dismiss-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        dismissedOrders.push(btn.dataset.order);
+        localStorage.setItem("dismissedOrders", JSON.stringify(dismissedOrders));
+        renderOrderLists();
       });
     });
 

@@ -868,6 +868,18 @@ app.get("/api/admin/stats", requireAuth, (req, res) => {
   });
 });
 
+// Auto-transition "ready" orders to "picked_up" after 30 minutes
+setInterval(() => {
+  const expired = db.prepare(
+    "SELECT * FROM orders WHERE status = 'ready' AND (julianday('now') - julianday(updated_at)) * 1440 > 30"
+  ).all();
+  for (const order of expired) {
+    db.prepare("UPDATE orders SET status = 'picked_up', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(order.id);
+    broadcastSSE("order-update", { order_number: order.order_number, status: "picked_up", student_da: order.student_da });
+    console.log(`Auto-delivered: #${order.order_number} (30min timeout)`);
+  }
+}, 60000); // Check every minute
+
 app.listen(PORT, () => {
   console.log(`Serveur démarré: http://localhost:${PORT}`);
 });
