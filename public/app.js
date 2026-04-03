@@ -1,18 +1,21 @@
 // ── State ──
 let searchTimer = null;
 let searchController = null;
-let cart = []; // { article_no, description, prix, quantity }
+let cart = [];
 let lastOrderNumber = null;
-let myOrders = JSON.parse(localStorage.getItem("myOrders") || "[]");
 let orderPollTimer = null;
 let studentDA = localStorage.getItem("studentDA") || "";
 let studentName = localStorage.getItem("studentName") || "";
+let frequentArticles = new Map(); // article_no -> total_qty
 
 const resultsEl = document.getElementById("results");
 const resultCount = document.getElementById("result-count");
 const emptyState = document.getElementById("empty-state");
 const searchInput = document.getElementById("search-input");
 const myOrdersEl = document.getElementById("my-orders");
+const myHistoryEl = document.getElementById("my-history");
+const historyModal = document.getElementById("history-modal");
+const historyBtn = document.getElementById("history-btn");
 const daModal = document.getElementById("da-modal");
 const userBadge = document.getElementById("user-badge");
 
@@ -22,19 +25,40 @@ function initDA() {
     daModal.classList.remove("open");
     userBadge.textContent = studentName;
     searchInput.focus();
+    loadFrequentArticles();
   } else {
     daModal.classList.add("open");
     document.getElementById("da-input").focus();
   }
 }
 
-document.getElementById("da-confirm").addEventListener("click", () => {
+// Auto-fill name when DA is typed
+document.getElementById("da-input").addEventListener("blur", async () => {
+  const da = document.getElementById("da-input").value.trim();
+  if (!da) return;
+  try {
+    const res = await fetch(`/api/students/${encodeURIComponent(da)}`);
+    if (res.ok) {
+      const student = await res.json();
+      const nameInput = document.getElementById("name-input");
+      if (!nameInput.value.trim()) nameInput.value = student.name;
+    }
+  } catch {}
+});
+
+document.getElementById("da-confirm").addEventListener("click", async () => {
   const da = document.getElementById("da-input").value.trim();
   const name = document.getElementById("name-input").value.trim();
   if (!da || !name) {
     alert("Veuillez entrer votre DA et votre nom.");
     return;
   }
+  // Save to DB
+  await fetch("/api/students", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ da, name }),
+  });
   studentDA = da;
   studentName = name;
   localStorage.setItem("studentDA", da);
@@ -44,6 +68,8 @@ document.getElementById("da-confirm").addEventListener("click", () => {
   searchInput.focus();
   requestNotifPermission();
   connectSSE();
+  refreshMyOrders();
+  loadFrequentArticles();
 });
 
 // Allow Enter key in DA modal
@@ -52,14 +78,99 @@ document.getElementById("name-input").addEventListener("keydown", (e) => {
 });
 
 initDA();
+
+// ── History modal ──
+historyBtn.addEventListener("click", () => {
+  historyModal.classList.add("open");
+});
+document.getElementById("history-close").addEventListener("click", () => {
+  historyModal.classList.remove("open");
+});
+historyModal.addEventListener("click", (e) => {
+  if (e.target === historyModal) historyModal.classList.remove("open");
+});
+
 const cartBar = document.getElementById("cart-bar");
 const cartItemsEl = document.getElementById("cart-items");
 const cartCountEl = document.getElementById("cart-count");
 const submitOrderBtn = document.getElementById("submit-order-btn");
 const submitModal = document.getElementById("submit-modal");
 
+// ── Frequent articles ──
+let frequentRows = [];
+
+async function loadFrequentArticles() {
+  if (!studentDA) return;
+  try {
+    const res = await fetch(`/api/students/${encodeURIComponent(studentDA)}/frequent`);
+    if (!res.ok) return;
+    frequentRows = await res.json();
+    frequentArticles = new Map(frequentRows.map((r) => [r.article_no, r.total_qty]));
+    showSuggestionsIfIdle();
+  } catch {}
+}
+
+// ── Photo search ──
+const photoBtn = document.getElementById("photo-search-btn");
+const photoInput = document.getElementById("photo-input");
+const photoStatus = document.getElementById("photo-status");
+
+photoBtn.addEventListener("click", () => photoInput.click());
+
+photoInput.addEventListener("change", async () => {
+  const file = photoInput.files[0];
+  if (!file) return;
+  photoInput.value = "";
+
+  photoStatus.textContent = "Identification en cours...";
+  photoStatus.classList.add("visible");
+  emptyState.style.display = "none";
+
+  try {
+    const formData = new FormData();
+    formData.append("photo", file);
+
+    const res = await fetch("/api/search/photo", { method: "POST", body: formData });
+    if (!res.ok) throw new Error("Erreur");
+
+    const data = await res.json();
+    photoStatus.textContent = `Recherche : "${data.keywords}"`;
+    searchInput.value = data.keywords;
+    displayResults(data.results);
+    resultCount.style.display = "block";
+    resultCount.textContent = `${data.results.length} r\u00e9sultat${data.results.length > 1 ? "s" : ""} pour "${data.keywords}"`;
+
+    setTimeout(() => { photoStatus.classList.remove("visible"); }, 3000);
+  } catch (err) {
+    photoStatus.textContent = "Erreur d'identification.";
+    setTimeout(() => { photoStatus.classList.remove("visible"); }, 3000);
+    console.error(err);
+  }
+});
+
+function showSuggestionsIfIdle() {
+  if (searchInput.value.trim()) return;
+  if (frequentRows.length === 0) {
+    emptyState.style.display = "";
+    return;
+  }
+  emptyState.style.display = "none";
+  resultCount.style.display = "block";
+  resultCount.textContent = "Vous avez r\u00e9cemment emprunt\u00e9 :";
+  resultCount.dataset.custom = "1";
+  const items = frequentRows.filter((r) => r.item).map((r) => r.item);
+  displayResults(items);
+}
+
 // ── Live search ──
+const searchClear = document.getElementById("search-clear");
+
+function updateClearBtn() {
+  searchClear.classList.toggle("visible", searchInput.value.length > 0);
+}
+
 searchInput.addEventListener("input", () => {
+  updateClearBtn();
   const query = searchInput.value.trim();
   if (searchTimer) clearTimeout(searchTimer);
   if (searchController) searchController.abort();
@@ -67,11 +178,20 @@ searchInput.addEventListener("input", () => {
   if (!query) {
     resultsEl.innerHTML = "";
     resultCount.style.display = "none";
-    emptyState.style.display = "";
+    showSuggestionsIfIdle();
     return;
   }
 
   searchTimer = setTimeout(() => liveSearch(query), 120);
+});
+
+searchClear.addEventListener("click", () => {
+  searchInput.value = "";
+  updateClearBtn();
+  resultsEl.innerHTML = "";
+  resultCount.style.display = "none";
+  showSuggestionsIfIdle();
+  searchInput.focus();
 });
 
 async function liveSearch(query) {
@@ -84,7 +204,14 @@ async function liveSearch(query) {
       signal: searchController.signal,
     });
     if (!res.ok) return;
-    const results = await res.json();
+    let results = await res.json();
+    // Boost frequently ordered items to top, keep original order for the rest
+    if (frequentArticles.size > 0) {
+      const freq = results.filter((r) => frequentArticles.has(r["No d'article"]));
+      const rest = results.filter((r) => !frequentArticles.has(r["No d'article"]));
+      freq.sort((a, b) => (frequentArticles.get(b["No d'article"]) || 0) - (frequentArticles.get(a["No d'article"]) || 0));
+      results = [...freq, ...rest];
+    }
     displayResults(results);
   } catch (err) {
     if (err.name !== "AbortError") console.error(err);
@@ -103,34 +230,39 @@ function displayResults(items) {
   }
 
   resultCount.style.display = "block";
-  resultCount.textContent = `${items.length} résultat${items.length > 1 ? "s" : ""}`;
+  if (!resultCount.dataset.custom) {
+    resultCount.textContent = `${items.length} r\u00e9sultat${items.length > 1 ? "s" : ""}`;
+  }
+  resultCount.dataset.custom = "";
 
   items.forEach((item) => {
     const dispo = parseInt(item["Disponible"]) || 0;
     const articleNo = item["No d'article"];
     const inCart = cart.find((c) => c.article_no === articleNo);
+    const freq = frequentArticles.get(articleNo) || 0;
     const card = document.createElement("div");
     card.className = "item-card";
+    card.dataset.article = articleNo;
     card.innerHTML = `
+      <div class="card-photo-slot"></div>
       <div class="card-header">
         <div class="article-no">#${articleNo}</div>
         ${dispo > 0 ? `
           <button class="add-btn ${inCart ? "added" : ""}" data-article="${articleNo}" data-desc="${item["Description"]}" data-prix="${item["Prix"]}" data-loc="${item["Localisation"] || ""}">
-            ${inCart ? "Ajouté" : "+ Ajouter"}
+            ${inCart ? "\u2713" : "+"}
           </button>
         ` : ""}
       </div>
-      <div class="description">${item["Description"]}</div>
+      <div class="description">${item["Description"]}${freq > 0 ? ` <span style="font-size:0.7rem;color:#888;font-style:italic;">(command\u00e9 ${freq}x)</span>` : ""}</div>
       <div class="meta">
-        <span>Qté: <strong>${item["Quantité"]}</strong></span>
-        <span class="${dispo === 0 ? "out-of-stock" : ""}">Dispo: <strong>${item["Disponible"]}</strong></span>
-        <span>Prix: <strong>${item["Prix"]}$</strong></span>
-        ${item["Localisation"] ? `<span>Loc: <strong>${item["Localisation"]}</strong></span>` : ""}
-        ${item["État"] ? `<span>État: <strong>${item["État"]}</strong></span>` : ""}
-        ${item["Fournisseur"] ? `<span>Fourn: <strong>${item["Fournisseur"]}</strong></span>` : ""}
+        <span class="${dispo === 0 ? "out-of-stock" : ""}">Dispo: <strong>${dispo}</strong></span>
+        <span class="card-doc-slot"></span>
       </div>
     `;
     resultsEl.appendChild(card);
+
+    // Load photo + doc async
+    loadItemExtras(articleNo, card);
   });
 
   // Add-to-cart buttons
@@ -142,9 +274,23 @@ function displayResults(items) {
       const loc = btn.dataset.loc;
       addToCart(articleNo, desc, prix, loc);
       btn.classList.add("added");
-      btn.textContent = "Ajouté";
+      btn.textContent = "\u2713";
     });
   });
+}
+
+async function loadItemExtras(articleNo, card) {
+  try {
+    const res = await fetch(`/api/items/${encodeURIComponent(articleNo)}/extras`);
+    if (!res.ok) return;
+    const extras = await res.json();
+    if (extras.photo_path) {
+      card.querySelector(".card-photo-slot").innerHTML = `<img class="item-photo" src="${extras.photo_path}" alt="" loading="lazy">`;
+    }
+    if (extras.doc_url) {
+      card.querySelector(".card-doc-slot").innerHTML = `<a class="doc-link" href="${extras.doc_url}" target="_blank" rel="noopener">Documentation</a>`;
+    }
+  } catch {}
 }
 
 // ── Cart logic ──
@@ -165,7 +311,7 @@ function removeFromCart(articleNo) {
   resultsEl.querySelectorAll(".add-btn").forEach((btn) => {
     if (btn.dataset.article === articleNo) {
       btn.classList.remove("added");
-      btn.textContent = "+ Ajouter";
+      btn.textContent = "+";
     }
   });
 }
@@ -197,13 +343,16 @@ function renderCart() {
     const chip = document.createElement("div");
     chip.className = "cart-chip";
     chip.innerHTML = `
-      <span>#${item.article_no}</span>
-      <div class="qty-control">
-        <button class="qty-btn" data-article="${item.article_no}" data-delta="-1">-</button>
-        <span>${item.quantity}</span>
-        <button class="qty-btn" data-article="${item.article_no}" data-delta="1">+</button>
+      <div class="chip-top">
+        <span>#${item.article_no}</span>
+        <div class="qty-control">
+          <button class="qty-btn" data-article="${item.article_no}" data-delta="-1">-</button>
+          <span>${item.quantity}</span>
+          <button class="qty-btn" data-article="${item.article_no}" data-delta="1">+</button>
+        </div>
+        <button class="remove-btn" data-article="${item.article_no}">&times;</button>
       </div>
-      <button class="remove-btn" data-article="${item.article_no}">&times;</button>
+      <div class="chip-desc">${item.description}</div>
     `;
     cartItemsEl.appendChild(chip);
   });
@@ -233,27 +382,18 @@ const STATUS_NOTIF = {
   ready: "Votre commande est pr\u00eate! Pr\u00e9sentez-vous au comptoir.",
 };
 
-function saveMyOrders() {
-  localStorage.setItem("myOrders", JSON.stringify(myOrders));
-}
 
 // ── Push notification permission ──
 function updateNotifUI() {
   const modalBtn = document.getElementById("notif-btn");
-  const headerBtn = document.getElementById("notif-header-btn");
   if (!("Notification" in window)) {
     if (modalBtn) { modalBtn.textContent = "Non support\u00e9"; modalBtn.disabled = true; }
-    if (headerBtn) headerBtn.style.display = "none";
     return;
   }
   if (Notification.permission === "granted") {
-    if (modalBtn) { modalBtn.textContent = "Notifications activ\u00e9es"; modalBtn.style.borderColor = "#22c55e"; modalBtn.style.color = "#22c55e"; modalBtn.disabled = true; }
-    if (headerBtn) { headerBtn.textContent = "Notifs activ\u00e9es"; headerBtn.style.display = ""; headerBtn.style.borderColor = "#22c55e"; headerBtn.style.color = "#22c55e"; headerBtn.disabled = true; }
+    if (modalBtn) { modalBtn.textContent = "Notifications activ\u00e9es"; modalBtn.style.borderColor = "#2e7d32"; modalBtn.style.color = "#2e7d32"; modalBtn.disabled = true; }
   } else if (Notification.permission === "denied") {
-    if (modalBtn) { modalBtn.textContent = "Bloqu\u00e9es"; modalBtn.style.color = "#f87171"; modalBtn.disabled = true; }
-    if (headerBtn) { headerBtn.textContent = "Notifs bloqu\u00e9es"; headerBtn.style.display = ""; headerBtn.style.borderColor = "#f87171"; headerBtn.style.color = "#f87171"; headerBtn.title = "Cliquez sur le cadenas dans la barre d'adresse pour d\u00e9bloquer"; }
-  } else {
-    if (headerBtn) headerBtn.style.display = "";
+    if (modalBtn) { modalBtn.textContent = "Bloqu\u00e9es"; modalBtn.style.color = "#c62828"; modalBtn.disabled = true; }
   }
 }
 
@@ -268,7 +408,6 @@ async function askNotifPermission() {
 }
 
 document.getElementById("notif-btn")?.addEventListener("click", askNotifPermission);
-document.getElementById("notif-header-btn")?.addEventListener("click", askNotifPermission);
 
 updateNotifUI();
 
@@ -295,8 +434,8 @@ function connectSSE() {
 
   evtSource.addEventListener("order-update", (e) => {
     const data = JSON.parse(e.data);
-    // Only care about our orders
-    if (!myOrders.includes(data.order_number)) return;
+    // Only care about our DA
+    if (data.student_da !== studentDA) return;
 
     // Push notification
     if (STATUS_NOTIF[data.status]) {
@@ -316,67 +455,124 @@ function connectSSE() {
   };
 }
 
+function renderMyOrderCard(order, statusText, statusCls, faded) {
+  const summary = (order.items || []).map((i) => `${i.quantity}x #${i.article_no}`).join(", ");
+  const detail = (order.items || []).map((i) =>
+    `<div class="order-item-row">
+      <span class="order-item-qty">x${i.quantity}</span>
+      <span class="order-item-no">#${i.article_no}</span>
+      <span class="order-item-desc">${(i.description || "").substring(0, 40)}</span>
+    </div>`
+  ).join("");
+
+  return `
+    <div class="my-order ${faded ? "faded" : ""}">
+      <div class="my-order-header" data-toggle="${order.order_number}">
+        <div class="order-num">#${order.order_number}</div>
+        <span class="order-status ${statusCls}">${statusText}</span>
+        <div class="order-detail">${summary}</div>
+        ${order.status === "pending" ? `<button class="cancel-link" data-order="${order.order_number}">Annuler</button>` : ""}
+        ${faded ? `<button class="reorder-btn" data-order-id="${order.id}">Recommander</button>` : ""}
+        <span class="expand-arrow">&#9662;</span>
+      </div>
+      <div class="my-order-items" id="order-detail-${order.order_number}" style="display:none;">
+        ${detail}
+      </div>
+    </div>
+  `;
+}
+
 async function refreshMyOrders() {
-  if (myOrders.length === 0) {
+  if (!studentDA) {
     myOrdersEl.classList.remove("visible");
     return;
   }
 
-  let html = "";
-  const stillActive = [];
+  try {
+    const res = await fetch(`/api/orders/by-da/${encodeURIComponent(studentDA)}`);
+    if (!res.ok) return;
+    const allOrders = await res.json();
 
-  for (const num of myOrders) {
-    try {
-      const res = await fetch(`/api/orders/${num}`);
-      if (!res.ok) continue;
-      const order = await res.json();
-      if (!order) continue;
+    const active = allOrders.filter((o) => o.status !== "picked_up" && o.status !== "cancelled");
+    const history = allOrders.filter((o) => o.status === "picked_up" || o.status === "cancelled").slice(0, 5);
 
-      if (order.status === "picked_up" || order.status === "cancelled") continue;
+    let activeHtml = "";
+    let historyHtml = "";
 
-      stillActive.push(num);
-      const items = (order.items || []).map((i) => `${i.quantity}x #${i.article_no}`).join(", ");
-
-      html += `
-        <div class="my-order">
-          <div class="order-num">#${order.order_number}</div>
-          <span class="order-status ${order.status}">${STATUS_LABELS[order.status] || order.status}</span>
-          <div class="order-detail">${items}</div>
-          ${order.status === "pending" ? `<button class="cancel-link" data-order="${order.order_number}">Annuler</button>` : ""}
-        </div>
-      `;
-    } catch (err) {
-      stillActive.push(num);
+    for (const order of active) {
+      activeHtml += renderMyOrderCard(order, STATUS_LABELS[order.status] || order.status, order.status, false);
     }
-  }
 
-  myOrders = stillActive;
-  saveMyOrders();
+    if (history.length > 0) {
+      for (const order of history) {
+        const statusText = order.status === "cancelled" ? "Annul\u00e9e" : "Termin\u00e9e";
+        historyHtml += renderMyOrderCard(order, statusText, "history", true);
+      }
+    }
 
-  if (html) {
-    myOrdersEl.innerHTML = html;
-    myOrdersEl.classList.add("visible");
+    // Active orders at top
+    if (activeHtml) {
+      myOrdersEl.innerHTML = activeHtml;
+      myOrdersEl.classList.add("visible");
+    } else {
+      myOrdersEl.innerHTML = "";
+      myOrdersEl.classList.remove("visible");
+    }
 
-    myOrdersEl.querySelectorAll(".cancel-link").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        if (!confirm("\u00cates-vous s\u00fbr de vouloir annuler cette demande?")) return;
-        try {
-          const res = await fetch(`/api/orders/${btn.dataset.order}`, { method: "DELETE" });
-          if (res.ok) {
-            myOrders = myOrders.filter((n) => n !== btn.dataset.order);
-            saveMyOrders();
-            refreshMyOrders();
-          } else {
-            const data = await res.json();
-            alert(data.error || "Impossible d'annuler");
-          }
-        } catch (err) {
-          alert("Erreur lors de l'annulation.");
-        }
-      });
-    });
-  } else {
-    myOrdersEl.classList.remove("visible");
+    // History in modal
+    myHistoryEl.innerHTML = historyHtml || `<div style="color:#aaa;text-align:center;padding:1rem;">Aucune commande pass\u00e9e</div>`;
+    historyBtn.style.display = history.length > 0 ? "" : "none";
+
+    const html = activeHtml + historyHtml;
+    if (html) {
+
+      // Bind events on both containers
+      for (const container of [myOrdersEl, myHistoryEl]) {
+        container.querySelectorAll(".cancel-link").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            if (!confirm("\u00cates-vous s\u00fbr de vouloir annuler cette demande?")) return;
+            try {
+              const r = await fetch(`/api/orders/${btn.dataset.order}`, { method: "DELETE" });
+              if (r.ok) refreshMyOrders();
+              else {
+                const data = await r.json();
+                alert(data.error || "Impossible d'annuler");
+              }
+            } catch { alert("Erreur."); }
+          });
+        });
+
+        container.querySelectorAll(".reorder-btn").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const orderId = btn.dataset.orderId;
+            const order = allOrders.find((o) => o.id == orderId);
+            if (!order) return;
+            for (const item of order.items || []) {
+              addToCart(item.article_no, item.description, item.prix, item.localisation);
+            }
+            renderCart();
+          });
+        });
+
+        container.querySelectorAll("[data-toggle]").forEach((header) => {
+          header.addEventListener("click", (e) => {
+            if (e.target.closest(".cancel-link") || e.target.closest(".reorder-btn")) return;
+            const num = header.dataset.toggle;
+            const detail = document.getElementById(`order-detail-${num}`);
+            const arrow = header.querySelector(".expand-arrow");
+            if (detail.style.display === "none") {
+              detail.style.display = "";
+              arrow.textContent = "\u25b4";
+            } else {
+              detail.style.display = "none";
+              arrow.textContent = "\u25be";
+            }
+          });
+        });
+      }
+    }
+  } catch (err) {
+    console.error("Failed to load orders:", err);
   }
 }
 
@@ -435,8 +631,6 @@ document.getElementById("modal-confirm").addEventListener("click", async () => {
     if (!res.ok) throw new Error("Erreur serveur");
     const data = await res.json();
     lastOrderNumber = data.order_number;
-    myOrders.push(data.order_number);
-    saveMyOrders();
     refreshMyOrders();
 
     document.getElementById("modal-form").style.display = "none";
@@ -445,6 +639,11 @@ document.getElementById("modal-confirm").addEventListener("click", async () => {
 
     cart = [];
     renderCart();
+    // Reset all add buttons back to "+"
+    resultsEl.querySelectorAll(".add-btn.added").forEach((btn) => {
+      btn.classList.remove("added");
+      btn.textContent = "+";
+    });
   } catch (err) {
     alert("Erreur lors de la soumission. R\u00e9essayez.");
     console.error(err);

@@ -83,7 +83,6 @@ function renderOrders() {
   document.getElementById("stat-preparing").textContent = preparing.length;
   document.getElementById("stat-ready").textContent = ready.length;
 
-  // Update page title with count
   const total = pending.length + preparing.length + ready.length;
   document.title = total > 0 ? `(${total}) Dashboard Magasinier` : "Dashboard Magasinier";
 
@@ -105,10 +104,8 @@ function renderOrders() {
   }
 
   if (ready.length > 0) {
-    html += `<div class="section-title">Prêtes à remettre (${ready.length})</div>`;
-    html += ready.map((o) => renderOrderCard(o, [
-      { label: "Remise", cls: "btn-pickup", status: "picked_up" },
-    ])).join("");
+    html += `<div class="section-title">Prêtes (${ready.length})</div>`;
+    html += ready.map((o) => renderOrderCard(o, [], `<span class="status-badge status-done">Prête</span>`)).join("");
   }
 
   if (total === 0) {
