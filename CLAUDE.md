@@ -5,7 +5,7 @@ Magasin TGE — système d'inventaire et de commandes pour un magasin de pièces
 
 ## Stack technique
 - **Backend** : Node.js / Express, SQLite (better-sqlite3), pas d'ORM
-- **Frontend** : Vanilla JS, CSS inline dans les HTML, pas de framework
+- **Frontend** : Vanilla JS, CSS inline dans les HTML + design system (`design.css`), pas de framework
 - **Recherche** : hybride (mots-clés + cosine similarity sur embeddings pré-calculés)
 - **Embeddings** : serveur Python local (sentence-transformers, multilingual-e5-small) sur GPU, port 5111
 - **Temps réel** : SSE (Server-Sent Events), pas de WebSocket
@@ -26,6 +26,18 @@ systemctl restart magasin-tge embedding-server  # Redémarrer les services
 - `public/admin.js` : dashboard magasinier
 - `print-client/` : client d'impression autonome pour RPi
 - Les embeddings sont indexés par position — ne pas réordonner `inventoryData` sans regénérer
+
+## Design system (`public/design.css`)
+**Toujours utiliser les CSS custom properties** définies dans `design.css` au lieu de couleurs/tailles hardcodées.
+- Couleurs : `--color-primary`, `--color-accent`, `--color-success`, `--color-danger`, `--color-bg`, `--color-surface`, `--color-border`, `--color-text`, `--color-text-secondary`, `--color-text-muted`, etc.
+- Typographie : `--font-family`, `--font-mono`, `--font-size-xs` à `--font-size-3xl`
+- Espacement : `--space-xs` à `--space-2xl`
+- Rayons : `--radius-sm` à `--radius-round`
+- Ombres : `--shadow-sm`, `--shadow-md`, `--shadow-lg`, `--shadow-float`
+- Layout : `--header-height`, `--sidebar-width`, `--content-max-width`
+- Composants réutilisables : `.btn`, `.btn-primary`, `.btn-secondary`, `.card`, `.badge`, `.badge-pending`, `.input`, `.modal-overlay`, `.modal`, `.mono`
+- Ne jamais écrire `#1a1a2e` ou `#0066cc` directement — utiliser `var(--color-primary)` ou `var(--color-accent)`
+- Pour changer le thème de l'app, modifier uniquement les variables dans `:root` de `design.css`
 
 ## Conventions
 - Les étudiants n'ont pas de login, juste un numéro de DA (5-9 chiffres)
