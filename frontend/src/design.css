@@ -79,6 +79,10 @@
 /* ══ Base Reset ══ */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+html {
+  overflow-y: scroll;
+}
+
 body {
   font-family: var(--font-family);
   background: var(--color-bg);
