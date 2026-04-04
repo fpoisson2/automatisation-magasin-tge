@@ -42,9 +42,8 @@ export function StudentPage() {
   // DA modal
   const [daInput, setDaInput] = useState("");
   const [nameInput, setNameInput] = useState("");
-  const [daSuggestions, setDaSuggestions] = useState([]);
+  const [daStep, setDaStep] = useState("da"); // "da" or "name"
   const showDAModal = !studentDA || !studentName;
-  const daTimer = useRef(null);
 
   // ── Load frequent articles ──
   useEffect(() => {
@@ -173,30 +172,27 @@ export function StudentPage() {
     localStorage.setItem("dismissedOrders", JSON.stringify(next));
   };
 
-  // ── DA auto-fill + autocomplete ──
-  const handleDAInput = (val) => {
-    setDaInput(val);
-    if (daTimer.current) clearTimeout(daTimer.current);
-    if (val.length >= 2) {
-      daTimer.current = setTimeout(async () => {
-        const results = await api.autocompleteDA(val);
-        setDaSuggestions(results || []);
-      }, 200);
+  // ── DA login flow ──
+  const handleDASubmit = async () => {
+    if (!daInput || !/^\d{5,9}$/.test(daInput)) return;
+
+    // Try to find existing student
+    const student = await api.getStudent(daInput);
+    if (student) {
+      // Known student — log in directly
+      await api.saveStudent(daInput, student.name);
+      loginStudent(daInput, student.name);
+      if ("Notification" in window && Notification.permission === "default") Notification.requestPermission();
     } else {
-      setDaSuggestions([]);
+      // New student — ask for name
+      setDaStep("name");
     }
   };
 
-  const selectDA = (da, name) => {
-    setDaInput(da);
-    setNameInput(name);
-    setDaSuggestions([]);
-  };
-
-  const handleDAConfirm = async () => {
-    if (!daInput || !nameInput) return;
-    await api.saveStudent(daInput, nameInput);
-    loginStudent(daInput, nameInput);
+  const handleNameSubmit = async () => {
+    if (!nameInput.trim()) return;
+    await api.saveStudent(daInput, nameInput.trim());
+    loginStudent(daInput, nameInput.trim());
     if ("Notification" in window && Notification.permission === "default") Notification.requestPermission();
   };
 
@@ -236,32 +232,22 @@ export function StudentPage() {
       {/* DA Modal */}
       <Modal open={showDAModal}>
         <h2>Magasin TGE</h2>
-        <p style={{ color: "var(--color-text-muted)", marginBottom: "1rem", fontSize: "0.85rem" }}>Identifiez-vous pour passer des commandes.</p>
-        <label style={{ display: "block", fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "0.2rem" }}>Numéro de DA</label>
-        <div style={{ position: "relative", marginBottom: "0.85rem" }}>
-          <input className="input" value={daInput} onChange={(e) => handleDAInput(e.target.value)} placeholder="1234567" autoFocus autoComplete="off" />
-          {daInput.length >= 2 && (daSuggestions.length > 0 || daInput.length >= 5) && (
-            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-md)", zIndex: 10, overflow: "hidden" }}>
-              {daSuggestions.map((s) => (
-                <div key={s.da} onClick={() => selectDA(s.da, s.name)} style={{ padding: "0.5rem 0.75rem", cursor: "pointer", fontSize: "var(--font-size-sm)", borderBottom: "1px solid var(--color-border-light)", display: "flex", justifyContent: "space-between" }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-input-bg)"} onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-                  <span className="mono" style={{ fontWeight: 600 }}>{s.da}</span>
-                  <span style={{ color: "var(--color-text-muted)" }}>{s.name}</span>
-                </div>
-              ))}
-              {daSuggestions.length === 0 && daInput.length >= 5 && (
-                <div style={{ padding: "0.5rem 0.75rem", fontSize: "var(--font-size-sm)", color: "var(--color-text-muted)" }}>
-                  Nouveau DA — entrez votre nom ci-dessous
-                </div>
-              )}
+        {daStep === "da" ? (
+          <>
+            <p style={{ color: "var(--color-text-muted)", marginBottom: "1rem", fontSize: "0.85rem" }}>Entrez votre numéro de DA pour commencer.</p>
+            <input className="input" value={daInput} onChange={(e) => setDaInput(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => e.key === "Enter" && handleDASubmit()} placeholder="1234567" autoFocus style={{ marginBottom: "0.85rem", fontSize: "1.2rem", textAlign: "center", letterSpacing: "0.1em" }} />
+            <button className="btn btn-primary" style={{ width: "100%" }} onClick={handleDASubmit} disabled={daInput.length < 5}>Continuer</button>
+          </>
+        ) : (
+          <>
+            <p style={{ color: "var(--color-text-muted)", marginBottom: "1rem", fontSize: "0.85rem" }}>Bienvenue! C'est votre première visite. Comment vous appelez-vous?</p>
+            <input className="input" value={nameInput} onChange={(e) => setNameInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleNameSubmit()} placeholder="Prénom Nom" autoFocus style={{ marginBottom: "0.85rem" }} />
+            <div className="btn-row" style={{ justifyContent: "space-between" }}>
+              <button className="btn btn-secondary" onClick={() => { setDaStep("da"); setDaInput(""); }}>Retour</button>
+              <button className="btn btn-primary" onClick={handleNameSubmit} disabled={!nameInput.trim()}>Commencer</button>
             </div>
-          )}
-        </div>
-        <label style={{ display: "block", fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "0.2rem" }}>Nom</label>
-        <input className="input" value={nameInput} onChange={(e) => setNameInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleDAConfirm()} placeholder="Jean Tremblay" style={{ marginBottom: "0.85rem" }} />
-        <div className="btn-row" style={{ justifyContent: "center" }}>
-          <button className="btn btn-primary" onClick={handleDAConfirm}>Continuer</button>
-        </div>
+          </>
+        )}
       </Modal>
 
       {/* Header */}
