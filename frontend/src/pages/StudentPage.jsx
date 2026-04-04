@@ -240,7 +240,7 @@ export function StudentPage() {
         <label style={{ display: "block", fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "0.2rem" }}>Numéro de DA</label>
         <div style={{ position: "relative", marginBottom: "0.85rem" }}>
           <input className="input" value={daInput} onChange={(e) => handleDAInput(e.target.value)} placeholder="1234567" autoFocus autoComplete="off" />
-          {daInput.length >= 2 && (
+          {daInput.length >= 2 && (daSuggestions.length > 0 || daInput.length >= 5) && (
             <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-md)", zIndex: 10, overflow: "hidden" }}>
               {daSuggestions.map((s) => (
                 <div key={s.da} onClick={() => selectDA(s.da, s.name)} style={{ padding: "0.5rem 0.75rem", cursor: "pointer", fontSize: "var(--font-size-sm)", borderBottom: "1px solid var(--color-border-light)", display: "flex", justifyContent: "space-between" }}
@@ -249,7 +249,7 @@ export function StudentPage() {
                   <span style={{ color: "var(--color-text-muted)" }}>{s.name}</span>
                 </div>
               ))}
-              {daSuggestions.length === 0 && (
+              {daSuggestions.length === 0 && daInput.length >= 5 && (
                 <div style={{ padding: "0.5rem 0.75rem", fontSize: "var(--font-size-sm)", color: "var(--color-text-muted)" }}>
                   Nouveau DA — entrez votre nom ci-dessous
                 </div>
