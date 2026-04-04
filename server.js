@@ -10,6 +10,7 @@ const multer = require("multer");
 const bcrypt = require("bcryptjs");
 const compression = require("compression");
 const morgan = require("morgan");
+const helmet = require("helmet");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,6 +25,7 @@ app.use(morgan(":ts :method :url :status :res[content-length] :response-time ms 
   skip: (req) => req.url === "/api/health" || req.url.startsWith("/assets/") || req.url.endsWith(".js") || req.url.endsWith(".css"),
 }));
 
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
 app.use(express.json());
 
