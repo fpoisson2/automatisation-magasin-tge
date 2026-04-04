@@ -339,4 +339,22 @@ setInterval(() => {
   }
 }, 60000);
 
-app.listen(PORT, () => { console.log(`Serveur démarré: http://localhost:${PORT}`); });
+app.listen(PORT, () => {
+  console.log(`Serveur démarré: http://localhost:${PORT}`);
+
+  // ── Self-monitoring: restart if server becomes unresponsive ──
+  let healthFailures = 0;
+  setInterval(async () => {
+    try {
+      const res = await fetch(`http://127.0.0.1:${PORT}/api/health`, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) { healthFailures = 0; return; }
+      healthFailures++;
+    } catch {
+      healthFailures++;
+    }
+    if (healthFailures >= 3) {
+      console.error(`FATAL: Health check failed ${healthFailures} times. Exiting for restart.`);
+      process.exit(1);
+    }
+  }, 15000);
+});
