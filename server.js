@@ -9,12 +9,20 @@ const rateLimit = require("express-rate-limit");
 const multer = require("multer");
 const bcrypt = require("bcryptjs");
 const compression = require("compression");
+const morgan = require("morgan");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Trust Cloudflare Tunnel proxy
 app.set("trust proxy", 1);
+
+// ── Structured logging ──
+morgan.token("ts", () => new Date().toISOString());
+morgan.token("user", (req) => req.session?.userName || req.session?.userId || "-");
+app.use(morgan(":ts :method :url :status :res[content-length] :response-time ms :user :remote-addr", {
+  skip: (req) => req.url === "/api/health" || req.url.startsWith("/assets/") || req.url.endsWith(".js") || req.url.endsWith(".css"),
+}));
 
 app.use(compression());
 app.use(express.json());
