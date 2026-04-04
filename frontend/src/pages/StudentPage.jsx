@@ -55,7 +55,7 @@ export function StudentPage() {
         setResults(rows.filter((r) => r.item).map((r) => r.item));
       }
     });
-  }, [studentDA]);
+  }, [studentDA]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load orders ──
   const loadOrders = useCallback(async () => {
@@ -68,7 +68,7 @@ export function StudentPage() {
     setHistoryOffset(data.orders.length);
   }, [studentDA, dismissed, historySearch]);
 
-  useEffect(() => { loadOrders(); }, [loadOrders]);
+  useEffect(() => { loadOrders(); }, [loadOrders]); // eslint-disable-line react-hooks/set-state-in-effect
 
   // ── SSE ──
   useSSE(studentDA ? `/api/orders/stream?da=${studentDA}` : null, {

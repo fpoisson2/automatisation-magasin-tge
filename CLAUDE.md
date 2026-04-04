@@ -5,7 +5,7 @@ Magasin TGE — système d'inventaire et de commandes pour un magasin de pièces
 
 ## Stack technique
 - **Backend** : Node.js / Express, SQLite (better-sqlite3), pas d'ORM
-- **Frontend** : Vanilla JS, CSS inline dans les HTML + design system (`design.css`), pas de framework
+- **Frontend** : React 19 + Vite + React Router 7, design system (`design.css`)
 - **Recherche** : hybride (mots-clés + cosine similarity sur embeddings pré-calculés)
 - **Embeddings** : serveur Python local (sentence-transformers, multilingual-e5-small) sur GPU, port 5111
 - **Temps réel** : SSE (Server-Sent Events), pas de WebSocket
@@ -20,10 +20,20 @@ node generate-embeddings.js  # Régénérer les embeddings après changement d'i
 systemctl restart magasin-tge embedding-server  # Redémarrer les services
 ```
 
+## Commandes frontend
+```bash
+cd frontend && npm run dev    # Dev server avec HMR (port 5173, proxy vers 3000)
+cd frontend && npm run build  # Build production dans ../dist/
+```
+
 ## Architecture clé
 - `server.js` : tout le backend (auth, recherche, commandes, SSE, uploads, API vision)
-- `public/app.js` : toute la logique frontend étudiant
-- `public/admin.js` : dashboard magasinier
+- `frontend/src/` : React SPA (Vite)
+  - `api.js` : couche fetch centralisée
+  - `hooks/` : useSSE, useCart, useAuth, useAdminNotifications
+  - `components/` : AdminNav, Modal, Badge, ItemCard, Toasts, ConfirmDialog
+  - `pages/` : StudentPage, LoginPage, AdminOrders, AdminStats, AdminItems, AdminUsers
+- `dist/` : build React servi par Express en production (catch-all SPA)
 - `print-client/` : client d'impression autonome pour RPi
 - Les embeddings sont indexés par position — ne pas réordonner `inventoryData` sans regénérer
 

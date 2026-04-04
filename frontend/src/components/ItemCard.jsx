@@ -1,4 +1,3 @@
-import { useState } from "react";
 
 export function ItemCard({ item, cartQty = 0, onAdd, onUpdateQty, freq = 0 }) {
   const dispo = parseInt(item["Disponible"]) || 0;

@@ -19,8 +19,9 @@ export function AdminOrders() {
   useEffect(() => {
     fetchAll();
     clearPending();
-    return onOrderEvent(() => fetchAll());
-  }, []);
+    const unsub = onOrderEvent(() => fetchAll());
+    return unsub;
+  }, [clearPending, onOrderEvent]); // eslint-disable-line
 
   const changeStatus = async (id, status) => {
     await updateOrderStatus(id, status);
