@@ -3,7 +3,7 @@ const path = require("path");
 const multer = require("multer");
 const bcrypt = require("bcryptjs");
 
-module.exports = function ({ db, requireAuth, requireAdmin, apiLimiter, inventoryData }) {
+module.exports = function ({ db, requireAuth, requireAdmin, apiLimiter, uploadLimiter, inventoryData, audit }) {
   const router = express.Router();
 
   // ── Item extras ──
@@ -38,7 +38,7 @@ module.exports = function ({ db, requireAuth, requireAdmin, apiLimiter, inventor
     },
   });
 
-  router.post("/api/admin/items/:articleNo/photo", requireAuth, upload.single("photo"), (req, res) => {
+  router.post("/api/admin/items/:articleNo/photo", requireAuth, uploadLimiter, upload.single("photo"), (req, res) => {
     if (!req.file) return res.status(400).json({ error: "Photo requise" });
     const photoPath = `/uploads/${req.file.filename}`;
     db.prepare("INSERT INTO item_extras (article_no, photo_path) VALUES (?, ?) ON CONFLICT(article_no) DO UPDATE SET photo_path = ?").run(req.params.articleNo, photoPath, photoPath);
@@ -68,7 +68,7 @@ module.exports = function ({ db, requireAuth, requireAdmin, apiLimiter, inventor
     },
   });
 
-  router.post("/api/items/:articleNo/learn-photo", apiLimiter, photoLearnUpload.single("photo"), (req, res) => {
+  router.post("/api/items/:articleNo/learn-photo", uploadLimiter, photoLearnUpload.single("photo"), (req, res) => {
     if (!req.file) return res.status(400).json({ error: "Photo requise" });
     const photoPath = `/uploads/learned/${req.file.filename}`;
     db.prepare("INSERT INTO item_photos (article_no, photo_path, source) VALUES (?, ?, 'user')").run(req.params.articleNo, photoPath);
@@ -95,6 +95,7 @@ module.exports = function ({ db, requireAuth, requireAdmin, apiLimiter, inventor
     const hash = bcrypt.hashSync(password, 10);
     try {
       db.prepare("INSERT INTO admin_users (username, password, role, name) VALUES (?, ?, ?, ?)").run(username, hash, role || "magasinier", name || username);
+      audit("user_created", req, `${username} (${role || "magasinier"})`);
       res.json({ success: true });
     } catch (err) {
       if (err.message.includes("UNIQUE")) return res.status(409).json({ error: "Nom d'utilisateur déjà pris" });
@@ -104,7 +105,9 @@ module.exports = function ({ db, requireAuth, requireAdmin, apiLimiter, inventor
 
   router.delete("/api/admin/users/:id", requireAdmin, (req, res) => {
     if (parseInt(req.params.id) === req.session.userId) return res.status(400).json({ error: "Impossible de supprimer votre propre compte" });
+    const user = db.prepare("SELECT username FROM admin_users WHERE id = ?").get(req.params.id);
     db.prepare("DELETE FROM admin_users WHERE id = ?").run(req.params.id);
+    audit("user_deleted", req, user?.username || req.params.id);
     res.json({ success: true });
   });
 

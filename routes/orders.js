@@ -1,7 +1,7 @@
 const express = require("express");
 const path = require("path");
 
-module.exports = function ({ db, orderLimiter, apiLimiter, requireAuth, requirePrintToken, sseClients, broadcastSSE, getOrderWithItems, generateOrderNumber }) {
+module.exports = function ({ db, orderLimiter, apiLimiter, requireAuth, requirePrintToken, sseClients, broadcastSSE, getOrderWithItems, generateOrderNumber, audit }) {
   const router = express.Router();
 
   // ── SSE endpoints (must be before :number param routes) ──
@@ -135,6 +135,7 @@ module.exports = function ({ db, orderLimiter, apiLimiter, requireAuth, requireP
     if (!order) return res.status(404).json({ error: "Commande introuvable" });
 
     db.prepare("UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(status, req.params.id);
+    audit("order_status", req, `#${order.order_number} → ${status}`);
     broadcastSSE("order-update", { order_number: order.order_number, status, student_da: order.student_da });
     res.json({ success: true });
   });

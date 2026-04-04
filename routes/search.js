@@ -1,6 +1,6 @@
 const express = require("express");
 
-module.exports = function ({ searchLimiter, hybridSearch, deduplicateResults, inventoryData, db, apiLimiter, EMBEDDING_URL }) {
+module.exports = function ({ searchLimiter, uploadLimiter, hybridSearch, deduplicateResults, inventoryData, db, apiLimiter, EMBEDDING_URL }) {
   const router = express.Router();
   const multer = require("multer");
 
@@ -27,7 +27,7 @@ module.exports = function ({ searchLimiter, hybridSearch, deduplicateResults, in
     },
   });
 
-  router.post("/api/search/photo", searchLimiter, visualSearchUpload.single("photo"), async (req, res) => {
+  router.post("/api/search/photo", searchLimiter, uploadLimiter, visualSearchUpload.single("photo"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "Photo requise" });
 
     try {

@@ -25,7 +25,21 @@ app.use(morgan(":ts :method :url :status :res[content-length] :response-time ms 
 }));
 
 // ── Security & compression ──
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'", "https://api.openai.com"],
+      fontSrc: ["'self'"],
+      mediaSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+}));
 app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -34,6 +48,7 @@ app.use(express.urlencoded({ extended: true }));
 const orderLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, message: { error: "Trop de commandes." }, standardHeaders: true, legacyHeaders: false });
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, message: { error: "Trop de requêtes." }, standardHeaders: true, legacyHeaders: false });
 const searchLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, message: { error: "Trop de recherches." }, standardHeaders: true, legacyHeaders: false });
+const uploadLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 30, message: { error: "Trop d'uploads." }, standardHeaders: true, legacyHeaders: false });
 
 // ── Sessions (SQLite-backed) ──
 const SqliteStore = require("better-sqlite3-session-store")(session);
@@ -67,12 +82,15 @@ app.post("/api/login", (req, res) => {
     req.session.userId = user.id;
     req.session.userRole = user.role;
     req.session.userName = user.name || user.username;
+    audit("login", req, `${user.username} (${user.role})`);
     return res.json({ success: true, role: user.role, name: user.name });
   }
+  audit("login_failed", req, username);
   return res.status(401).json({ error: "Identifiants invalides" });
 });
 
 app.post("/api/logout", (req, res) => {
+  audit("logout", req);
   req.session.destroy();
   res.json({ success: true });
 });
@@ -242,6 +260,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS students (da TEXT PRIMARY KEY, name TEXT NOT NULL, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP);
   CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT, order_number TEXT UNIQUE NOT NULL, student_da TEXT NOT NULL, student_name TEXT NOT NULL, status TEXT DEFAULT 'pending', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
   CREATE TABLE IF NOT EXISTS order_items (id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE, article_no TEXT NOT NULL, description TEXT NOT NULL, quantity INTEGER DEFAULT 1, prix TEXT, localisation TEXT);
+  CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, user_id TEXT, user_name TEXT, details TEXT, ip TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
 `);
 
 // Seed admin from env
@@ -252,6 +271,14 @@ db.exec(`
     db.prepare("INSERT INTO admin_users (username, password, role, name) VALUES (?, ?, 'admin', 'Administrateur')").run(process.env.APP_USERNAME, hash);
     console.log(`Admin user '${process.env.APP_USERNAME}' created from env`);
   }
+}
+
+// ── Audit logging ──
+function audit(action, req, details = "") {
+  const userId = req.session?.userId || "-";
+  const userName = req.session?.userName || "-";
+  const ip = req.ip || req.connection?.remoteAddress || "-";
+  db.prepare("INSERT INTO audit_log (action, user_id, user_name, details, ip) VALUES (?, ?, ?, ?, ?)").run(action, String(userId), userName, details, ip);
 }
 
 // ── SSE ──
@@ -274,7 +301,7 @@ function requirePrintToken(req, res, next) {
 }
 
 // ── Mount route modules ──
-const deps = { db, inventoryData, embeddingsData, EMBEDDING_URL, sseClients, broadcastSSE, generateOrderNumber, getOrderWithItems, hybridSearch, deduplicateResults, requireAuth, requireAdmin, requirePrintToken, orderLimiter, apiLimiter, searchLimiter };
+const deps = { db, inventoryData, embeddingsData, EMBEDDING_URL, sseClients, broadcastSSE, generateOrderNumber, getOrderWithItems, hybridSearch, deduplicateResults, requireAuth, requireAdmin, requirePrintToken, orderLimiter, apiLimiter, searchLimiter, uploadLimiter, audit };
 app.use(require("./routes/search")(deps));
 app.use(require("./routes/orders")(deps));
 app.use(require("./routes/admin")(deps));
