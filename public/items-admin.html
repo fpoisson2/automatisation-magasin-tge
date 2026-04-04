@@ -170,12 +170,7 @@
   </style>
 </head>
 <body>
-  <header>
-    <h1>Articles</h1>
-    <div class="spacer"></div>
-    <a href="/admin">Commandes</a>
-    <a href="/admin/stats">Stats</a>
-  </header>
+  <header data-title="Articles" style="background:var(--color-primary);color:#fff;padding:0 var(--space-xl);height:var(--header-height);display:flex;align-items:center;gap:var(--space-lg);position:sticky;top:0;z-index:100;"></header>
 
   <main>
     <div class="search-box">
@@ -186,6 +181,7 @@
     <div id="item-results"></div>
   </main>
 
+  <script src="/admin-nav.js"></script>
   <script>
     const searchInput = document.getElementById("item-search");
     const resultsEl = document.getElementById("item-results");
@@ -232,7 +228,11 @@
           <div class="actions">
             <label>
               <input type="file" accept="image/*" data-article="${articleNo}" class="photo-upload">
-              Changer la photo
+              Choisir une photo
+            </label>
+            <label>
+              <input type="file" accept="image/*" capture="environment" data-article="${articleNo}" class="photo-upload">
+              Prendre une photo
             </label>
             <input type="text" class="doc-input" data-article="${articleNo}" placeholder="URL documentation" value="${extras.doc_url || ""}">
             <button class="save-doc" data-article="${articleNo}">Sauver doc</button>

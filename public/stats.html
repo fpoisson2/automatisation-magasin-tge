@@ -141,12 +141,7 @@
   </style>
 </head>
 <body>
-  <header>
-    <h1>Statistiques</h1>
-    <div class="spacer"></div>
-    <a href="/admin">Commandes</a>
-    <a href="/">Inventaire</a>
-  </header>
+  <header data-title="Statistiques" style="background:var(--color-primary);color:#fff;padding:0 var(--space-xl);height:var(--header-height);display:flex;align-items:center;gap:var(--space-lg);position:sticky;top:0;z-index:100;"></header>
 
   <main>
     <div class="stats-grid" id="summary"></div>
@@ -173,6 +168,7 @@
       caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
     }
   </script>
+  <script src="/admin-nav.js"></script>
   <script src="/stats.js"></script>
 </body>
 </html>

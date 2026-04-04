@@ -223,16 +223,7 @@
   </style>
 </head>
 <body>
-  <header>
-    <h1>Commandes</h1>
-    <div class="spacer"></div>
-    <button id="sound-toggle">Son: OFF</button>
-    <a href="/admin/stats">Stats</a>
-    <a href="/admin/items">Articles</a>
-    <a href="/admin/users" id="users-link" style="display:none;">Utilisateurs</a>
-    <a href="/">Inventaire</a>
-    <button id="logout-btn">D&#233;connexion</button>
-  </header>
+  <header data-title="Commandes" style="background:var(--color-primary);color:#fff;padding:0 var(--space-xl);height:var(--header-height);display:flex;align-items:center;gap:var(--space-lg);position:sticky;top:0;z-index:100;"></header>
 
   <main>
     <div class="stats">
@@ -253,12 +244,7 @@
     <div id="orders-container"></div>
   </main>
 
-  <script>
-    document.getElementById("logout-btn").addEventListener("click", async () => {
-      await fetch("/api/logout", { method: "POST" });
-      window.location.href = "/login";
-    });
-  </script>
-  <script src="admin.js"></script>
+  <script src="/admin-nav.js"></script>
+  <script src="/admin.js"></script>
 </body>
 </html>

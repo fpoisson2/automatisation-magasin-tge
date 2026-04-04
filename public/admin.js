@@ -4,14 +4,22 @@ let soundEnabled = false;
 let audioCtx = null;
 
 const ordersContainer = document.getElementById("orders-container");
-const soundToggle = document.getElementById("sound-toggle");
 
-// ── Sound toggle ──
+// ── Sound toggle (inject into header) ──
+const soundToggle = document.createElement("button");
+soundToggle.textContent = "Son: OFF";
+soundToggle.style.cssText = "padding:0.25rem 0.7rem;border:1px solid rgba(255,255,255,0.2);border-radius:var(--radius-sm);background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.8);font-size:0.75rem;cursor:pointer;";
+
+setTimeout(() => {
+  const logout = document.getElementById("admin-logout");
+  if (logout) logout.before(soundToggle);
+}, 100);
+
 soundToggle.addEventListener("click", () => {
   soundEnabled = !soundEnabled;
   soundToggle.textContent = `Son: ${soundEnabled ? "ON" : "OFF"}`;
-  soundToggle.classList.toggle("active", soundEnabled);
-  // Init AudioContext on user gesture
+  soundToggle.style.borderColor = soundEnabled ? "var(--color-success)" : "rgba(255,255,255,0.2)";
+  soundToggle.style.color = soundEnabled ? "#4ade80" : "rgba(255,255,255,0.8)";
   if (soundEnabled && !audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
@@ -159,14 +167,6 @@ function renderOrderCard(order, actions, badgeHtml = "") {
     </div>
   `;
 }
-
-// Show admin-only links
-fetch("/api/admin/me").then((r) => r.json()).then((me) => {
-  if (me.role === "admin") {
-    const link = document.getElementById("users-link");
-    if (link) link.style.display = "";
-  }
-}).catch(() => {});
 
 // ── SSE connection ──
 fetchOrders();
