@@ -293,6 +293,9 @@ app.get("/api/health", async (req, res) => {
 // ── API 404 ──
 app.all("/api/*", (req, res) => { res.status(404).json({ error: "Endpoint introuvable" }); });
 
+// ── Block sensitive files ──
+app.get(/\.(env|db|db-shm|db-wal|json|py|sh)$/i, (req, res) => { res.status(404).end(); });
+
 // ── SPA catch-all ──
 const spaIndex = path.join(__dirname, "dist", "index.html");
 if (fs.existsSync(spaIndex)) {
