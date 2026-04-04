@@ -32,7 +32,6 @@ export function AdminNav({ title }) {
         <NavLink to="/admin/stats" className="nav-link">Stats</NavLink>
         <NavLink to="/admin/items" className="nav-link">Articles</NavLink>
         {admin?.role === "admin" && <NavLink to="/admin/users" className="nav-link">Utilisateurs</NavLink>}
-        <NavLink to="/" className="nav-link">Inventaire</NavLink>
         <button className="nav-btn" onClick={handleLogout}>Déconnexion</button>
       </header>
 
