@@ -1,0 +1,226 @@
+/* ══ Design System — Magasin TGE ══ */
+
+:root {
+  /* ── Colors ── */
+  --color-primary: #1a1a2e;
+  --color-primary-light: #2d2d4a;
+  --color-accent: #0066cc;
+  --color-accent-light: rgba(0, 102, 204, 0.1);
+  --color-success: #2e7d32;
+  --color-success-light: #d4edda;
+  --color-success-bg: #e8f5e9;
+  --color-success-dark: #155724;
+  --color-danger: #c62828;
+  --color-danger-light: #fce4ec;
+  --color-danger-border: #e57373;
+  --color-warning-bg: #fff3cd;
+  --color-warning-text: #856404;
+  --color-info-bg: #cce5ff;
+  --color-info-text: #004085;
+
+  /* ── Neutrals ── */
+  --color-bg: #f0f2f5;
+  --color-surface: #fff;
+  --color-border: #e5e5e5;
+  --color-border-light: #f0f0f0;
+  --color-text: #1a1a1a;
+  --color-text-secondary: #666;
+  --color-text-muted: #888;
+  --color-text-faint: #aaa;
+  --color-text-placeholder: #bbb;
+  --color-input-bg: #f5f5f5;
+  --color-input-border: #d1d1d1;
+
+  /* ── Typography ── */
+  --font-family: -apple-system, system-ui, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'SF Mono', 'Consolas', 'Monaco', monospace;
+  --font-size-xs: 0.7rem;
+  --font-size-sm: 0.8rem;
+  --font-size-base: 0.9rem;
+  --font-size-md: 0.95rem;
+  --font-size-lg: 1rem;
+  --font-size-xl: 1.1rem;
+  --font-size-2xl: 1.4rem;
+  --font-size-3xl: 2.5rem;
+
+  /* ── Spacing ── */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.25rem;
+  --space-2xl: 1.75rem;
+
+  /* ── Radius ── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-pill: 24px;
+  --radius-round: 50%;
+
+  /* ── Shadows ── */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 2px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 4px 24px rgba(0, 0, 0, 0.12);
+  --shadow-float: 0 2px 16px rgba(0, 0, 0, 0.1);
+
+  /* ── Layout ── */
+  --header-height: 44px;
+  --sidebar-width: 300px;
+  --content-max-width: 960px;
+  --search-max-width: 600px;
+
+  /* ── Transitions ── */
+  --transition-fast: 0.15s ease;
+  --transition-base: 0.2s ease;
+}
+
+/* ══ Base Reset ══ */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-family);
+  background: var(--color-bg);
+  color: var(--color-text);
+  min-height: 100vh;
+}
+
+/* ══ Shared Components ══ */
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+  padding: var(--space-sm) var(--space-lg);
+  transition: all var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+  border: none;
+}
+
+.btn-primary {
+  background: var(--color-success);
+  color: #fff;
+}
+.btn-primary:hover { background: #1b5e20; }
+
+.btn-secondary {
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-input-border);
+}
+.btn-secondary:hover { border-color: var(--color-text-muted); }
+
+.btn-danger-outline {
+  background: var(--color-danger-light);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-lg);
+}
+.btn-danger-outline:hover { background: #f8bbd0; }
+
+.btn-ghost {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  padding: var(--space-xs) var(--space-sm);
+}
+.btn-ghost:hover { color: var(--color-text); }
+
+/* ── Cards ── */
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-md) var(--space-xl);
+}
+
+.card:hover { border-color: var(--color-input-border); }
+
+/* ── Badges ── */
+.badge {
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.badge-pending { background: var(--color-warning-bg); color: var(--color-warning-text); }
+.badge-preparing { background: var(--color-info-bg); color: var(--color-info-text); }
+.badge-ready { background: var(--color-success-light); color: var(--color-success-dark); }
+.badge-done { background: var(--color-success-bg); color: var(--color-success); }
+.badge-cancelled { background: var(--color-danger-light); color: var(--color-danger); }
+
+/* ── Inputs ── */
+.input {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-md);
+  outline: none;
+  font-family: var(--font-family);
+}
+
+.input:focus {
+  border-color: var(--color-accent);
+}
+
+.input::placeholder { color: var(--color-text-placeholder); }
+
+/* ── Modals ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+}
+
+.modal-overlay.open { display: flex; }
+
+.modal {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2xl);
+  width: 90%;
+  max-width: 380px;
+  box-shadow: var(--shadow-lg);
+}
+
+.modal h2 {
+  font-size: var(--font-size-xl);
+  color: var(--color-text);
+  margin-bottom: var(--space-lg);
+}
+
+.modal label {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-xs);
+}
+
+.modal .btn-row {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: flex-end;
+}
+
+/* ── Mono text ── */
+.mono {
+  font-family: var(--font-mono);
+}

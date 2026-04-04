@@ -66,11 +66,7 @@ app.use(
 // ── Auth middleware ──
 function requireAuth(req, res, next) {
   if (req.session && req.session.authenticated) return next();
-  // API routes return 401, page routes redirect
-  if (req.path.startsWith("/api/")) {
-    return res.status(401).json({ error: "Non autorisé" });
-  }
-  return res.redirect("/login");
+  return res.status(401).json({ error: "Non autorisé" });
 }
 
 function requireAdmin(req, res, next) {
@@ -78,10 +74,7 @@ function requireAdmin(req, res, next) {
   return res.status(403).json({ error: "Accès réservé aux administrateurs" });
 }
 
-// ── Login page ──
-app.get("/login", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "login.html"));
-});
+// Login page is now served by React SPA catch-all
 
 app.post("/api/login", (req, res) => {
   const { username, password } = req.body;
@@ -102,11 +95,11 @@ app.post("/api/logout", (req, res) => {
 });
 
 // ── Static files ──
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-// Serve login.html assets without auth
+// Serve React build (production) or old public (fallback)
+const distPath = path.join(__dirname, "dist");
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath, { maxAge: "1h", index: false }));
+}
 app.use(express.static("public", { index: false, maxAge: "1h" }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads"), { maxAge: "7d" }));
 
@@ -711,24 +704,7 @@ app.post("/api/print-ack/:number", requirePrintToken, (req, res) => {
 });
 
 // ── Admin order routes (auth required) ──
-app.get("/admin", requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "admin.html"));
-});
-
-app.get("/admin/stats", requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "stats.html"));
-});
-
-app.get("/admin/items", requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "items-admin.html"));
-});
-
-app.get("/admin/users", requireAdmin, (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "users.html"));
-});
-
-app.use("/admin.js", requireAuth, express.static(path.join(__dirname, "public", "admin.js")));
-app.use("/stats.js", requireAuth, express.static(path.join(__dirname, "public", "stats.js")));
+// Admin pages are now served by React SPA catch-all
 
 app.get("/api/admin/orders", requireAuth, (req, res) => {
   const orders = db.prepare(
@@ -1027,6 +1003,14 @@ setInterval(() => {
     console.log(`Auto-delivered: #${order.order_number} (30min timeout)`);
   }
 }, 60000); // Check every minute
+
+// ── SPA catch-all: serve React index.html for all non-API routes ──
+const spaIndex = path.join(__dirname, "dist", "index.html");
+if (fs.existsSync(spaIndex)) {
+  app.get("*", (req, res) => {
+    res.sendFile(spaIndex);
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`Serveur démarré: http://localhost:${PORT}`);

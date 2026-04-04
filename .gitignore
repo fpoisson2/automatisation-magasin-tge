@@ -6,5 +6,7 @@ magasin.db-shm
 magasin.db-wal
 sessions.db
 venv/
+dist/
+frontend/node_modules/
 print-client/node_modules/
 print-client/.env
