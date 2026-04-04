@@ -6,7 +6,6 @@ const fs = require("fs");
 const path = require("path");
 const Database = require("better-sqlite3");
 const rateLimit = require("express-rate-limit");
-const multer = require("multer");
 const bcrypt = require("bcryptjs");
 const compression = require("compression");
 const morgan = require("morgan");
@@ -25,53 +24,28 @@ app.use(morgan(":ts :method :url :status :res[content-length] :response-time ms 
   skip: (req) => req.url === "/api/health" || req.url.startsWith("/assets/") || req.url.endsWith(".js") || req.url.endsWith(".css"),
 }));
 
+// ── Security & compression ──
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
 app.use(express.json());
-
-// ── Rate limiters ──
-const orderLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1h
-  max: 10,
-  message: { error: "Trop de commandes. Réessayez plus tard." },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-const apiLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 min
-  max: 60,
-  message: { error: "Trop de requêtes. Réessayez dans une minute." },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-const searchLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 120,
-  message: { error: "Trop de recherches." },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 app.use(express.urlencoded({ extended: true }));
 
+// ── Rate limiters ──
+const orderLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, message: { error: "Trop de commandes." }, standardHeaders: true, legacyHeaders: false });
+const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, message: { error: "Trop de requêtes." }, standardHeaders: true, legacyHeaders: false });
+const searchLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, message: { error: "Trop de recherches." }, standardHeaders: true, legacyHeaders: false });
+
+// ── Sessions (SQLite-backed) ──
 const SqliteStore = require("better-sqlite3-session-store")(session);
 const sessionDb = new Database(path.join(__dirname, "sessions.db"));
 
-app.use(
-  session({
-    store: new SqliteStore({ client: sessionDb, expired: { clear: true, intervalMs: 3600000 } }),
-    secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex"),
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 8 * 60 * 60 * 1000, // 8 hours
-    },
-  })
-);
+app.use(session({
+  store: new SqliteStore({ client: sessionDb, expired: { clear: true, intervalMs: 3600000 } }),
+  secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex"),
+  resave: false,
+  saveUninitialized: false,
+  cookie: { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 8 * 60 * 60 * 1000 },
+}));
 
 // ── Auth middleware ──
 function requireAuth(req, res, next) {
@@ -84,8 +58,7 @@ function requireAdmin(req, res, next) {
   return res.status(403).json({ error: "Accès réservé aux administrateurs" });
 }
 
-// Login page is now served by React SPA catch-all
-
+// ── Auth routes ──
 app.post("/api/login", (req, res) => {
   const { username, password } = req.body;
   const user = db.prepare("SELECT * FROM admin_users WHERE username = ?").get(username);
@@ -105,7 +78,6 @@ app.post("/api/logout", (req, res) => {
 });
 
 // ── Static files ──
-// Serve React build (production) or old public (fallback)
 const distPath = path.join(__dirname, "dist");
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath, { maxAge: "1h", index: false }));
@@ -113,55 +85,26 @@ if (fs.existsSync(distPath)) {
 app.use(express.static("public", { index: false, maxAge: "1h" }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads"), { maxAge: "7d" }));
 
-// ── Multer for photo uploads ──
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: path.join(__dirname, "uploads"),
-    filename: (req, file, cb) => {
-      const ext = path.extname(file.originalname).toLowerCase();
-      const name = req.params.articleNo.replace(/[^a-zA-Z0-9_-]/g, "_");
-      cb(null, `${name}${ext}`);
-    },
-  }),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
-  fileFilter: (req, file, cb) => {
-    if (/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)) cb(null, true);
-    else cb(new Error("Format image invalide"));
-  },
-});
-
-// ── Protected API routes ──
-app.get("/api/inventory", requireAuth, (req, res) => {
-  const data = JSON.parse(
-    fs.readFileSync(path.join(__dirname, "excel-to-json.json"), "utf-8")
-  );
-  res.json(data);
-});
-
 // ── RAG: Load inventory + embeddings ──
 const EMBEDDING_URL = process.env.EMBEDDING_URL || "http://127.0.0.1:5111";
-
 let inventoryData = [];
 let embeddingsData = [];
 
 function loadRAGData() {
-  inventoryData = JSON.parse(
-    fs.readFileSync(path.join(__dirname, "excel-to-json.json"), "utf-8")
-  );
-
+  inventoryData = JSON.parse(fs.readFileSync(path.join(__dirname, "excel-to-json.json"), "utf-8"));
   const embFile = path.join(__dirname, "embeddings.json");
   if (fs.existsSync(embFile)) {
     const raw = JSON.parse(fs.readFileSync(embFile, "utf-8"));
     embeddingsData = raw.embeddings;
     console.log(`RAG: ${inventoryData.length} items, ${embeddingsData.length} embeddings loaded`);
   } else {
-    console.warn("RAG: embeddings.json not found. Run 'node generate-embeddings.js' first.");
+    console.warn("RAG: embeddings.json not found.");
   }
 }
 
 loadRAGData();
 
-// Filter out garbage inventory entries from search results
+// ── Search utilities ──
 function isValidItem(item) {
   const no = item["No d'article"] || "";
   const desc = (item["Description"] || "").trim();
@@ -174,183 +117,84 @@ function isValidItem(item) {
 
 function cosineSimilarity(a, b) {
   let dot = 0, normA = 0, normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
+  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; normA += a[i] * a[i]; normB += b[i] * b[i]; }
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-// Synonym expansion for search
 const SYNONYMS = {
-  "condo": "condensateur",
-  "condos": "condensateur",
-  "cap": "condensateur",
-  "resist": "résistance",
-  "res": "résistance",
-  "pot": "potentiomètre",
-  "potard": "potentiomètre",
-  "transfo": "transformateur",
-  "alim": "alimentation",
-  "alimantation": "alimentation",
-  "proto": "protoboard",
-  "breadboard": "protoboard",
-  "fer": "fer à souder",
-  "scope": "oscilloscope",
-  "oscillo": "oscilloscope",
-  "multi": "multimètre",
-  "multimetre": "multimètre",
-  "dmm": "multimètre",
-  "ldr": "photorésistance",
-  "led": "led",
-  "del": "led",
-  "diode electroluminescente": "led",
-  "usb": "usb",
-  "hdmi": "hdmi",
-  "bnc": "bnc",
-  "rj45": "rj45",
-  "ethernet": "rj45",
-  "rpi": "raspberry pi",
-  "rasp": "raspberry pi",
-  "uno": "arduino uno",
-  "mega": "arduino mega",
-  "nano": "arduino nano",
-  "opamp": "amplificateur opérationnel",
-  "op-amp": "amplificateur opérationnel",
-  "ampli": "amplificateur",
-  "ic": "circuit intégré",
-  "ci": "circuit intégré",
-  "pcb": "circuit imprimé",
-  "mosfet": "mosfet",
-  "bjt": "transistor",
-  "npn": "transistor npn",
-  "pnp": "transistor pnp",
-  "relay": "relais",
-  "relai": "relais",
-  "switch": "interrupteur",
-  "bouton": "bouton poussoir",
-  "wire": "fil",
-  "cable": "câble",
-  "solder": "soudure",
-  "soudure": "soudure",
-  "clip": "pince",
-  "probe": "sonde",
-  "batt": "batterie",
-  "pile": "batterie",
-  "moteur": "moteur",
-  "motor": "moteur",
-  "servo": "servomoteur",
-  "stepper": "moteur pas à pas",
+  "condo": "condensateur", "condos": "condensateur", "cap": "condensateur",
+  "resist": "résistance", "res": "résistance", "pot": "potentiomètre", "potard": "potentiomètre",
+  "transfo": "transformateur", "alim": "alimentation", "proto": "protoboard", "breadboard": "protoboard",
+  "fer": "fer à souder", "scope": "oscilloscope", "oscillo": "oscilloscope",
+  "multi": "multimètre", "multimetre": "multimètre", "dmm": "multimètre",
+  "led": "led", "del": "led", "usb": "usb", "hdmi": "hdmi", "bnc": "bnc",
+  "rj45": "rj45", "ethernet": "rj45", "rpi": "raspberry pi", "rasp": "raspberry pi",
+  "uno": "arduino uno", "mega": "arduino mega", "nano": "arduino nano",
+  "opamp": "amplificateur opérationnel", "op-amp": "amplificateur opérationnel",
+  "ampli": "amplificateur", "ic": "circuit intégré", "ci": "circuit intégré",
+  "pcb": "circuit imprimé", "mosfet": "mosfet", "bjt": "transistor",
+  "npn": "transistor npn", "pnp": "transistor pnp", "relay": "relais", "relai": "relais",
+  "switch": "interrupteur", "bouton": "bouton poussoir", "wire": "fil", "cable": "câble",
+  "solder": "soudure", "soudure": "soudure", "clip": "pince", "probe": "sonde",
+  "batt": "batterie", "pile": "batterie", "moteur": "moteur", "motor": "moteur",
+  "servo": "servomoteur", "stepper": "moteur pas à pas",
 };
 
 function expandSynonyms(query) {
   const terms = query.toLowerCase().split(/\s+/);
   const expanded = [...terms];
-  for (const term of terms) {
-    if (SYNONYMS[term]) {
-      expanded.push(...SYNONYMS[term].split(/\s+/));
-    }
-  }
+  for (const term of terms) { if (SYNONYMS[term]) expanded.push(...SYNONYMS[term].split(/\s+/)); }
   return [...new Set(expanded)].join(" ");
 }
 
-// Keyword search (exact matching)
 function keywordSearch(query, topK = 10) {
   const q = expandSynonyms(query).toLowerCase().trim();
   const terms = q.split(/\s+/);
-
-  return inventoryData
-    .map((item, index) => {
-      let score = 0;
-      const no = (item["No d'article"] || "").toLowerCase();
-      const desc = (item["Description"] || "").toLowerCase();
-      const keywords = (item["Mots clés"] || "").toLowerCase();
-      const loc = (item["Localisation"] || "").toLowerCase();
-      const fournisseur = (item["Fournisseur"] || "").toLowerCase();
-      const searchable = `${no} ${desc} ${keywords} ${loc} ${fournisseur}`;
-
-      if (no === q) score += 100;
-      for (const term of terms) {
-        if (no.includes(term)) score += 20;
-        if (desc.includes(term)) score += 10;
-        if (keywords.includes(term)) score += 8;
-        if (fournisseur.includes(term)) score += 5;
-        if (searchable.includes(term)) score += 1;
-      }
-      return { index, score };
-    })
-    .filter((r) => r.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topK);
+  return inventoryData.map((item, index) => {
+    let score = 0;
+    const no = (item["No d'article"] || "").toLowerCase();
+    const desc = (item["Description"] || "").toLowerCase();
+    const keywords = (item["Mots clés"] || "").toLowerCase();
+    const fournisseur = (item["Fournisseur"] || "").toLowerCase();
+    const searchable = `${no} ${desc} ${keywords} ${fournisseur}`;
+    if (no === q) score += 100;
+    for (const term of terms) {
+      if (no.includes(term)) score += 20;
+      if (desc.includes(term)) score += 10;
+      if (keywords.includes(term)) score += 8;
+      if (fournisseur.includes(term)) score += 5;
+      if (searchable.includes(term)) score += 1;
+    }
+    return { index, score };
+  }).filter((r) => r.score > 0).sort((a, b) => b.score - a.score).slice(0, topK);
 }
 
-// Hybrid search: combines semantic + keyword results
 async function hybridSearch(query, topK = 10) {
-  // Run both searches in parallel
   const embeddingPromise = fetch(`${EMBEDDING_URL}/embed-query`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ texts: query }),
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ texts: query }),
   });
-
   const kwResults = keywordSearch(query, topK);
-
   const res = await embeddingPromise;
   if (!res.ok) throw new Error("Embedding server unavailable");
-
   const data = await res.json();
   const queryEmb = data.embeddings[0];
-
-  // Semantic scores
   const semanticScored = embeddingsData
     .map((emb, i) => ({ index: i, score: cosineSimilarity(queryEmb, emb) }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topK * 2);
-
-  // Merge: use a map of index -> combined score
+    .sort((a, b) => b.score - a.score).slice(0, topK * 2);
   const scoreMap = new Map();
-
-  // Normalize and weight semantic scores (weight: 0.5)
   const maxSemantic = semanticScored[0]?.score || 1;
-  for (const r of semanticScored) {
-    const norm = r.score / maxSemantic;
-    scoreMap.set(r.index, (scoreMap.get(r.index) || 0) + norm * 0.5);
-  }
-
-  // Normalize and weight keyword scores (weight: 0.5)
+  for (const r of semanticScored) scoreMap.set(r.index, (scoreMap.get(r.index) || 0) + (r.score / maxSemantic) * 0.5);
   const maxKw = kwResults[0]?.score || 1;
-  for (const r of kwResults) {
-    const norm = r.score / maxKw;
-    scoreMap.set(r.index, (scoreMap.get(r.index) || 0) + norm * 0.5);
-  }
-
-  // Sort by combined score, apply minimum threshold
+  for (const r of kwResults) scoreMap.set(r.index, (scoreMap.get(r.index) || 0) + (r.score / maxKw) * 0.5);
   const MIN_SCORE = 0.15;
-  const results = [...scoreMap.entries()]
+  return [...scoreMap.entries()]
     .map(([index, score]) => ({ index, score }))
     .filter((r) => r.score >= MIN_SCORE)
     .sort((a, b) => b.score - a.score)
-    .slice(0, topK);
-
-  return results.map((s) => ({ ...inventoryData[s.index], _score: s.score }));
+    .slice(0, topK)
+    .map((s) => ({ ...inventoryData[s.index], _score: s.score }));
 }
 
-const SYSTEM_PROMPT = `Tu es l'assistant du Magasin TGE, un magasin de pièces électroniques dans un cégep (collège).
-Tu es très amical, chaleureux et enthousiaste. Tu tutoies les gens. Tu utilises un ton décontracté et positif.
-
-Ton rôle PRINCIPAL est d'aider les gens à trouver des articles dans l'inventaire du magasin.
-
-Quand l'utilisateur cherche un article, les résultats de recherche pertinents de l'inventaire sont automatiquement fournis dans le contexte ci-dessous. Utilise-les pour répondre.
-
-Après avoir vu les résultats:
-1. Résume les résultats de façon concise et amicale (mentionne le numéro d'article et la description)
-2. Si la quantité disponible est 0, mentionne-le
-3. Si rien de pertinent n'est trouvé, dis-le et suggère d'essayer avec d'autres mots-clés
-
-Tu parles en français québécois naturel. Sois bref dans tes réponses.`;
-
-// Deduplicate items by description, sum quantities, filter available
 function deduplicateResults(items, limit = 25) {
   const seen = new Map();
   for (const item of items) {
@@ -365,8 +209,6 @@ function deduplicateResults(items, limit = 25) {
     }
   }
   const results = [...seen.values()].filter((i) => (parseInt(i["Disponible"]) || 0) > 0).slice(0, limit);
-
-  // Enrich with extras (photo, doc) in one query
   if (results.length) {
     const articleNos = results.map((r) => r["No d'article"]);
     const placeholders = articleNos.map(() => "?").join(",");
@@ -378,11 +220,9 @@ function deduplicateResults(items, limit = 25) {
       if (ex) { r._photo = ex.photo_path; r._doc = ex.doc_url; }
     }
   }
-
   return results;
 }
 
-// Get order with items helper
 function getOrderWithItems(orderNumber) {
   const order = db.prepare("SELECT * FROM orders WHERE order_number = ?").get(orderNumber);
   if (!order) return null;
@@ -390,113 +230,21 @@ function getOrderWithItems(orderNumber) {
   return order;
 }
 
-// ── Search API (public — students don't need auth) ──
-app.post("/api/search", searchLimiter, async (req, res) => {
-  try {
-    const { query } = req.body;
-    if (!query) return res.status(400).json({ error: "Query requis" });
-    const raw = await hybridSearch(query, 50);
-    res.json(deduplicateResults(raw));
-  } catch (err) {
-    console.error("Search failed:", err);
-    res.status(500).json({ error: "Erreur serveur" });
-  }
-});
-
-app.post("/api/chat", requireAuth, async (req, res) => {
-  try {
-    const { messages } = req.body;
-    if (!messages || !messages.length) {
-      return res.status(400).json({ error: "Messages requis" });
-    }
-
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-    if (!lastUserMsg) {
-      return res.status(400).json({ error: "Aucun message utilisateur" });
-    }
-
-    const start = Date.now();
-
-    // RAG search directly — no LLM needed
-    const searchResults = await hybridSearch(lastUserMsg.content, 10);
-    const searchMs = Date.now() - start;
-    console.log(`Search "${lastUserMsg.content}" → ${searchResults.length} results in ${searchMs}ms`);
-
-    // Build a simple text reply from results
-    let reply;
-    if (searchResults.length === 0) {
-      reply = "Aucun article trouvé pour cette recherche. Essaie avec d'autres mots-clés!";
-    } else {
-      const lines = searchResults.slice(0, 5).map((item) => {
-        const dispo = parseInt(item["Disponible"]) || 0;
-        const status = dispo > 0 ? `${dispo} dispo` : "rupture de stock";
-        return `**#${item["No d'article"]}** — ${item["Description"].trim()} (${status}, ${item["Prix"]}$)`;
-      });
-      reply = `J'ai trouvé ${searchResults.length} résultat${searchResults.length > 1 ? "s" : ""}:\n\n${lines.join("\n")}`;
-      if (searchResults.length > 5) {
-        reply += `\n\n...et ${searchResults.length - 5} autre${searchResults.length - 5 > 1 ? "s" : ""} dans les cartes ci-dessous.`;
-      }
-    }
-
-    res.json({ reply, results: searchResults });
-  } catch (err) {
-    console.error("Chat failed:", err);
-    res.status(500).json({ error: "Erreur serveur" });
-  }
-});
-
-// ── SQLite: Orders queue ──
+// ── SQLite ──
 const db = new Database(path.join(__dirname, "magasin.db"));
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 
 db.exec(`
-  CREATE TABLE IF NOT EXISTS admin_users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    role TEXT DEFAULT 'magasinier',
-    name TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-  CREATE TABLE IF NOT EXISTS item_photos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    article_no TEXT NOT NULL,
-    photo_path TEXT NOT NULL,
-    source TEXT DEFAULT 'user',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-  CREATE TABLE IF NOT EXISTS item_extras (
-    article_no TEXT PRIMARY KEY,
-    photo_path TEXT,
-    doc_url TEXT
-  );
-  CREATE TABLE IF NOT EXISTS students (
-    da TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-  CREATE TABLE IF NOT EXISTS orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    order_number TEXT UNIQUE NOT NULL,
-    student_da TEXT NOT NULL,
-    student_name TEXT NOT NULL,
-    status TEXT DEFAULT 'pending',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-  CREATE TABLE IF NOT EXISTS order_items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
-    article_no TEXT NOT NULL,
-    description TEXT NOT NULL,
-    quantity INTEGER DEFAULT 1,
-    prix TEXT,
-    localisation TEXT
-  );
+  CREATE TABLE IF NOT EXISTS item_photos (id INTEGER PRIMARY KEY AUTOINCREMENT, article_no TEXT NOT NULL, photo_path TEXT NOT NULL, source TEXT DEFAULT 'user', created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS item_extras (article_no TEXT PRIMARY KEY, photo_path TEXT, doc_url TEXT);
+  CREATE TABLE IF NOT EXISTS admin_users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT DEFAULT 'magasinier', name TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS students (da TEXT PRIMARY KEY, name TEXT NOT NULL, last_seen DATETIME DEFAULT CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT, order_number TEXT UNIQUE NOT NULL, student_da TEXT NOT NULL, student_name TEXT NOT NULL, status TEXT DEFAULT 'pending', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS order_items (id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE, article_no TEXT NOT NULL, description TEXT NOT NULL, quantity INTEGER DEFAULT 1, prix TEXT, localisation TEXT);
 `);
 
-// Seed default admin from env if no users exist
+// Seed admin from env
 {
   const count = db.prepare("SELECT COUNT(*) as cnt FROM admin_users").get().cnt;
   if (count === 0 && process.env.APP_USERNAME && process.env.APP_PASSWORD) {
@@ -506,556 +254,59 @@ db.exec(`
   }
 }
 
-// ── SSE: connected clients ──
-const sseClients = new Set(); // { res, da? } — da is set for students, null for admin
-
+// ── SSE ──
+const sseClients = new Set();
 function broadcastSSE(event, data) {
   const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  for (const client of sseClients) {
-    client.res.write(msg);
-  }
+  for (const client of sseClients) client.res.write(msg);
 }
 
 function generateOrderNumber() {
-  const row = db.prepare(
-    "SELECT MAX(CAST(order_number AS INTEGER)) as max_num FROM orders"
-  ).get();
+  const row = db.prepare("SELECT MAX(CAST(order_number AS INTEGER)) as max_num FROM orders").get();
   return String((row?.max_num || 0) + 1).padStart(3, "0");
 }
 
-// ── Student identification ──
-app.get("/api/students/:da", apiLimiter, (req, res) => {
-  if (!/^\d{5,9}$/.test(req.params.da)) return res.status(400).json({ error: "DA invalide" });
-  const student = db.prepare("SELECT * FROM students WHERE da = ?").get(req.params.da);
-  if (!student) return res.status(404).json({ error: "Inconnu" });
-  db.prepare("UPDATE students SET last_seen = CURRENT_TIMESTAMP WHERE da = ?").run(req.params.da);
-  res.json(student);
-});
-
-app.post("/api/students", apiLimiter, (req, res) => {
-  const { da, name } = req.body;
-  if (!da || !name) return res.status(400).json({ error: "DA et nom requis" });
-  if (!/^\d{5,9}$/.test(da.trim())) return res.status(400).json({ error: "DA invalide (5-9 chiffres)" });
-  if (name.trim().length < 2 || name.trim().length > 100) return res.status(400).json({ error: "Nom invalide" });
-  db.prepare(
-    "INSERT INTO students (da, name) VALUES (?, ?) ON CONFLICT(da) DO UPDATE SET name = ?, last_seen = CURRENT_TIMESTAMP"
-  ).run(da.trim(), name.trim(), name.trim());
-  res.json({ success: true });
-});
-
-// ── Frequent items for a student (enriched with inventory data) ──
-app.get("/api/students/:da/frequent", apiLimiter, (req, res) => {
-  if (!/^\d{5,9}$/.test(req.params.da)) return res.status(400).json({ error: "DA invalide" });
-  const rows = db.prepare(`
-    SELECT oi.article_no, SUM(oi.quantity) as total_qty
-    FROM order_items oi
-    JOIN orders o ON o.id = oi.order_id
-    WHERE o.student_da = ? AND o.status != 'cancelled'
-    GROUP BY oi.article_no
-    ORDER BY total_qty DESC
-    LIMIT 20
-  `).all(req.params.da);
-
-  // Enrich with inventory data
-  const enriched = rows.map((r) => {
-    const inv = inventoryData.find((i) => i["No d'article"] === r.article_no);
-    if (!inv) return { ...r, found: false };
-    return { ...r, found: true, item: inv };
-  }).filter((r) => r.found);
-
-  res.json(enriched);
-});
-
-// ── SSE endpoints (must be before :number param routes) ──
-app.get("/api/orders/stream", (req, res) => {
-  const da = req.query.da;
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-  });
-  res.write("event: connected\ndata: {}\n\n");
-
-  const client = { res, da: da || null };
-  sseClients.add(client);
-
-  req.on("close", () => { sseClients.delete(client); });
-});
-
-app.get("/api/admin/orders/stream", requireAuth, (req, res) => {
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-  });
-  res.write("event: connected\ndata: {}\n\n");
-
-  const client = { res, da: null };
-  sseClients.add(client);
-
-  req.on("close", () => { sseClients.delete(client); });
-});
-
-// ── Order routes (no auth — students) ──
-app.post("/api/orders", orderLimiter, (req, res) => {
-  const { student_da, student_name, items } = req.body;
-  if (!student_da || !student_name || !items?.length) {
-    return res.status(400).json({ error: "DA, nom et articles requis" });
-  }
-  if (!/^\d{5,9}$/.test(student_da.trim())) {
-    return res.status(400).json({ error: "DA invalide (5-9 chiffres)" });
-  }
-  if (student_name.trim().length < 2 || student_name.trim().length > 100) {
-    return res.status(400).json({ error: "Nom invalide" });
-  }
-  if (items.length > 20) {
-    return res.status(400).json({ error: "Maximum 20 articles par commande" });
-  }
-
-  const orderNumber = generateOrderNumber();
-  const insert = db.prepare(
-    "INSERT INTO orders (order_number, student_da, student_name) VALUES (?, ?, ?)"
-  );
-  const insertItem = db.prepare(
-    "INSERT INTO order_items (order_id, article_no, description, quantity, prix, localisation) VALUES (?, ?, ?, ?, ?, ?)"
-  );
-
-  const tx = db.transaction(() => {
-    const result = insert.run(orderNumber, student_da.trim(), student_name.trim());
-    const orderId = result.lastInsertRowid;
-    for (const item of items) {
-      insertItem.run(orderId, item.article_no, item.description, item.quantity || 1, item.prix || "0", item.localisation || "");
-    }
-    return orderId;
-  });
-
-  try {
-    tx();
-    broadcastSSE("order-new", {
-      order_number: orderNumber,
-      student_da: student_da.trim(),
-      student_name: student_name.trim(),
-      items: items.map((i) => ({ article_no: i.article_no, description: i.description, quantity: i.quantity || 1, prix: i.prix || "0" })),
-    });
-    res.json({ order_number: orderNumber });
-  } catch (err) {
-    console.error("Order creation failed:", err);
-    res.status(500).json({ error: "Erreur serveur" });
-  }
-});
-
-// Get active orders for a student by DA
-app.get("/api/orders/by-da/:da", apiLimiter, (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit) || 20, 100);
-  const offset = parseInt(req.query.offset) || 0;
-  const search = req.query.q || "";
-
-  let orders;
-  if (search) {
-    orders = db.prepare(`
-      SELECT o.* FROM orders o
-      JOIN order_items oi ON oi.order_id = o.id
-      WHERE o.student_da = ? AND (oi.article_no LIKE ? OR oi.description LIKE ? OR o.order_number LIKE ?)
-      GROUP BY o.id
-      ORDER BY o.created_at DESC LIMIT ? OFFSET ?
-    `).all(req.params.da, `%${search}%`, `%${search}%`, `%${search}%`, limit, offset);
-  } else {
-    orders = db.prepare(
-      "SELECT * FROM orders WHERE student_da = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
-    ).all(req.params.da, limit, offset);
-  }
-
-  for (const order of orders) {
-    order.items = db.prepare("SELECT * FROM order_items WHERE order_id = ?").all(order.id);
-  }
-
-  const total = db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE student_da = ?").get(req.params.da).cnt;
-  res.json({ orders, total, limit, offset });
-});
-
-app.get("/api/orders/:number", apiLimiter, (req, res) => {
-  const order = getOrderWithItems(req.params.number);
-  if (!order) return res.status(404).json({ error: "Commande introuvable" });
-  res.json(order);
-});
-
-app.delete("/api/orders/:number", apiLimiter, (req, res) => {
-  const order = db.prepare(
-    "SELECT * FROM orders WHERE order_number = ?"
-  ).get(req.params.number);
-  if (!order) return res.status(404).json({ error: "Commande introuvable" });
-  if (order.status !== "pending") {
-    return res.status(400).json({ error: "Impossible d'annuler, la commande est déjà en traitement" });
-  }
-  db.prepare("UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(order.id);
-  broadcastSSE("order-update", { order_number: order.order_number, status: "cancelled", student_da: order.student_da });
-  res.json({ success: true });
-});
-
-// ── Print client acknowledgment ──
 const PRINT_TOKEN = process.env.PRINT_TOKEN || "";
-
 function requirePrintToken(req, res, next) {
   if (!PRINT_TOKEN) return res.status(503).json({ error: "Impression non configurée" });
-  const auth = req.headers.authorization;
-  if (auth === `Bearer ${PRINT_TOKEN}`) return next();
+  if (req.headers.authorization === `Bearer ${PRINT_TOKEN}`) return next();
   return res.status(401).json({ error: "Token invalide" });
 }
 
-app.post("/api/print-ack/:number", requirePrintToken, (req, res) => {
-  const order = db.prepare("SELECT * FROM orders WHERE order_number = ?").get(req.params.number);
-  if (!order) return res.status(404).json({ error: "Commande introuvable" });
-  if (order.status !== "pending") return res.json({ success: true, already: true });
+// ── Mount route modules ──
+const deps = { db, inventoryData, embeddingsData, EMBEDDING_URL, sseClients, broadcastSSE, generateOrderNumber, getOrderWithItems, hybridSearch, deduplicateResults, requireAuth, requireAdmin, requirePrintToken, orderLimiter, apiLimiter, searchLimiter };
+app.use(require("./routes/search")(deps));
+app.use(require("./routes/orders")(deps));
+app.use(require("./routes/admin")(deps));
 
-  db.prepare("UPDATE orders SET status = 'preparing', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(order.id);
-  broadcastSSE("order-update", { order_number: order.order_number, status: "preparing", student_da: order.student_da });
-  console.log(`Print-ack: #${order.order_number} → preparing`);
-  res.json({ success: true });
+// ── Health check ──
+app.get("/api/health", async (req, res) => {
+  const checks = { server: "ok", database: "error", embeddings: "error", uptime: process.uptime() };
+  try { db.prepare("SELECT 1").get(); checks.database = "ok"; checks.orders = db.prepare("SELECT COUNT(*) as cnt FROM orders").get().cnt; checks.students = db.prepare("SELECT COUNT(*) as cnt FROM students").get().cnt; } catch (e) { checks.databaseError = e.message; }
+  try { const r = await fetch(`${EMBEDDING_URL}/health`, { signal: AbortSignal.timeout(3000) }); if (r.ok) { const d = await r.json(); checks.embeddings = "ok"; checks.embeddingModel = d.model; } } catch (e) { checks.embeddingsError = e.message; }
+  checks.inventoryItems = inventoryData.length;
+  checks.embeddingsLoaded = embeddingsData.length;
+  checks.sseClients = sseClients.size;
+  res.status(checks.database === "ok" && checks.embeddings === "ok" ? 200 : 503).json(checks);
 });
 
-// ── Admin order routes (auth required) ──
-// Admin pages are now served by React SPA catch-all
+// ── API 404 ──
+app.all("/api/*", (req, res) => { res.status(404).json({ error: "Endpoint introuvable" }); });
 
-app.get("/api/admin/orders", requireAuth, (req, res) => {
-  const orders = db.prepare(
-    "SELECT * FROM orders WHERE status NOT IN ('picked_up', 'cancelled') ORDER BY created_at ASC"
-  ).all();
+// ── SPA catch-all ──
+const spaIndex = path.join(__dirname, "dist", "index.html");
+if (fs.existsSync(spaIndex)) {
+  app.get("*", (req, res) => { res.sendFile(spaIndex); });
+}
 
-  for (const order of orders) {
-    order.items = db.prepare(
-      "SELECT * FROM order_items WHERE order_id = ?"
-    ).all(order.id);
-  }
-
-  res.json(orders);
-});
-
-app.get("/api/admin/orders/all", requireAuth, (req, res) => {
-  const orders = db.prepare(
-    "SELECT * FROM orders ORDER BY created_at DESC LIMIT 100"
-  ).all();
-
-  for (const order of orders) {
-    order.items = db.prepare(
-      "SELECT * FROM order_items WHERE order_id = ?"
-    ).all(order.id);
-  }
-
-  res.json(orders);
-});
-
-app.patch("/api/admin/orders/:id", requireAuth, (req, res) => {
-  const { status } = req.body;
-  const validStatuses = ["pending", "preparing", "ready", "picked_up", "cancelled"];
-  if (!validStatuses.includes(status)) {
-    return res.status(400).json({ error: "Statut invalide" });
-  }
-
-  // Get order info before update for broadcast
-  const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(req.params.id);
-  if (!order) return res.status(404).json({ error: "Commande introuvable" });
-
-  db.prepare(
-    "UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-  ).run(status, req.params.id);
-
-  broadcastSSE("order-update", { order_number: order.order_number, status, student_da: order.student_da });
-  res.json({ success: true });
-});
-
-// ── Item extras (photo + doc) ──
-app.post("/api/items/extras-batch", (req, res) => {
-  const { articleNos } = req.body;
-  if (!articleNos?.length) return res.json({});
-  const placeholders = articleNos.map(() => "?").join(",");
-  const rows = db.prepare(`SELECT * FROM item_extras WHERE article_no IN (${placeholders})`).all(...articleNos);
-  const map = {};
-  for (const r of rows) map[r.article_no] = r;
-  res.json(map);
-});
-
-app.get("/api/items/:articleNo/extras", (req, res) => {
-  const extras = db.prepare("SELECT * FROM item_extras WHERE article_no = ?").get(req.params.articleNo);
-  res.json(extras || { article_no: req.params.articleNo, photo_path: null, doc_url: null });
-});
-
-app.post("/api/admin/items/:articleNo/photo", requireAuth, upload.single("photo"), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "Photo requise" });
-  const photoPath = `/uploads/${req.file.filename}`;
-  db.prepare(
-    "INSERT INTO item_extras (article_no, photo_path) VALUES (?, ?) ON CONFLICT(article_no) DO UPDATE SET photo_path = ?"
-  ).run(req.params.articleNo, photoPath, photoPath);
-  res.json({ photo_path: photoPath });
-});
-
-app.post("/api/admin/items/:articleNo/doc", requireAuth, (req, res) => {
-  const { doc_url } = req.body;
-  if (!doc_url) return res.status(400).json({ error: "URL requise" });
-  db.prepare(
-    "INSERT INTO item_extras (article_no, doc_url) VALUES (?, ?) ON CONFLICT(article_no) DO UPDATE SET doc_url = ?"
-  ).run(req.params.articleNo, doc_url, doc_url);
-  res.json({ success: true });
-});
-
-// ── Photo learning: associate search photos with articles ──
-const photoLearnUpload = multer({
-  storage: multer.diskStorage({
-    destination: path.join(__dirname, "uploads", "learned"),
-    filename: (req, file, cb) => {
-      const name = req.params.articleNo.replace(/[^a-zA-Z0-9_-]/g, "_");
-      cb(null, `${name}_${Date.now()}${path.extname(file.originalname).toLowerCase()}`);
-    },
-  }),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    if (/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)) cb(null, true);
-    else cb(new Error("Format invalide"));
-  },
-});
-
-app.post("/api/items/:articleNo/learn-photo", apiLimiter, photoLearnUpload.single("photo"), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "Photo requise" });
-  const photoPath = `/uploads/learned/${req.file.filename}`;
-  db.prepare("INSERT INTO item_photos (article_no, photo_path, source) VALUES (?, ?, 'user')").run(req.params.articleNo, photoPath);
-
-  // If article has no main photo, set this as the main one
-  const extras = db.prepare("SELECT photo_path FROM item_extras WHERE article_no = ?").get(req.params.articleNo);
-  if (!extras || !extras.photo_path) {
-    db.prepare(
-      "INSERT INTO item_extras (article_no, photo_path) VALUES (?, ?) ON CONFLICT(article_no) DO UPDATE SET photo_path = ?"
-    ).run(req.params.articleNo, photoPath, photoPath);
-  }
-
-  console.log(`Photo learned: ${req.params.articleNo} ← ${req.file.filename}`);
-  res.json({ success: true });
-});
-
-// ── Visual search: identify component from photo ──
-const visualSearchUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    if (/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)) cb(null, true);
-    else cb(new Error("Format image invalide"));
-  },
-});
-
-app.post("/api/search/photo", searchLimiter, visualSearchUpload.single("photo"), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "Photo requise" });
-
-  try {
-    const base64 = req.file.buffer.toString("base64");
-    const mimeType = req.file.mimetype;
-
-    // Ask GPT-5.4-nano to identify the component
-    const visionRes = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-5.4-nano",
-        messages: [
-          {
-            role: "system",
-            content: "Tu es un expert en composants électroniques. L'utilisateur te montre une photo d'un composant. Identifie-le en 2-5 mots-clés de recherche pour un inventaire de magasin électronique (ex: 'résistance 10k', 'arduino uno', 'câble BNC'). Réponds UNIQUEMENT avec les mots-clés, rien d'autre.",
-          },
-          {
-            role: "user",
-            content: [
-              { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
-              { type: "text", text: "Qu'est-ce que c'est?" },
-            ],
-          },
-        ],
-        max_completion_tokens: 50,
-      }),
-    });
-
-    if (!visionRes.ok) {
-      console.error("Vision API error:", await visionRes.text());
-      return res.status(500).json({ error: "Erreur identification" });
-    }
-
-    const visionData = await visionRes.json();
-    const keywords = visionData.choices[0].message.content.trim();
-    console.log(`Visual search: "${keywords}"`);
-
-    // Search inventory with those keywords
-    const raw = await hybridSearch(keywords, 50);
-    res.json({ keywords, results: deduplicateResults(raw) });
-  } catch (err) {
-    console.error("Visual search failed:", err);
-    res.status(500).json({ error: "Erreur serveur" });
-  }
-});
-
-app.post("/api/session", requireAuth, async (req, res) => {
-  try {
-    const response = await fetch(
-      "https://api.openai.com/v1/realtime/sessions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gpt-realtime-1.5",
-          voice: "shimmer",
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const err = await response.text();
-      console.error("OpenAI session error:", err);
-      return res.status(response.status).json({ error: "Erreur OpenAI" });
-    }
-
-    const data = await response.json();
-    // Only send the ephemeral client_secret, never the full API key
-    res.json({ client_secret: data.client_secret });
-  } catch (err) {
-    console.error("Session creation failed:", err);
-    res.status(500).json({ error: "Erreur serveur" });
-  }
-});
-
-// ── Admin user management (admin role only) ──
-app.get("/api/admin/users", requireAdmin, (req, res) => {
-  const users = db.prepare("SELECT id, username, role, name, created_at FROM admin_users ORDER BY created_at").all();
-  res.json(users);
-});
-
-app.post("/api/admin/users", requireAdmin, (req, res) => {
-  const { username, password, role, name } = req.body;
-  if (!username || !password) return res.status(400).json({ error: "Nom d'utilisateur et mot de passe requis" });
-  if (role && !["admin", "magasinier"].includes(role)) return res.status(400).json({ error: "Rôle invalide" });
-  const hash = bcrypt.hashSync(password, 10);
-  try {
-    db.prepare("INSERT INTO admin_users (username, password, role, name) VALUES (?, ?, ?, ?)").run(username, hash, role || "magasinier", name || username);
-    res.json({ success: true });
-  } catch (err) {
-    if (err.message.includes("UNIQUE")) return res.status(409).json({ error: "Nom d'utilisateur déjà pris" });
-    res.status(500).json({ error: "Erreur serveur" });
-  }
-});
-
-app.delete("/api/admin/users/:id", requireAdmin, (req, res) => {
-  if (parseInt(req.params.id) === req.session.userId) return res.status(400).json({ error: "Impossible de supprimer votre propre compte" });
-  db.prepare("DELETE FROM admin_users WHERE id = ?").run(req.params.id);
-  res.json({ success: true });
-});
-
-app.get("/api/admin/me", requireAuth, (req, res) => {
-  res.json({ id: req.session.userId, role: req.session.userRole, name: req.session.userName });
-});
-
-// ── Statistics ──
-app.get("/api/admin/stats", requireAuth, (req, res) => {
-  console.log("Stats request from:", req.session.userName, "role:", req.session.userRole);
-  const topArticles = db.prepare(`
-    SELECT oi.article_no, oi.description, SUM(oi.quantity) as total_qty, COUNT(DISTINCT oi.order_id) as order_count
-    FROM order_items oi
-    JOIN orders o ON o.id = oi.order_id
-    WHERE o.status != 'cancelled'
-    GROUP BY oi.article_no
-    ORDER BY total_qty DESC
-    LIMIT 20
-  `).all();
-
-  const avgPrepTime = db.prepare(`
-    SELECT AVG((julianday(updated_at) - julianday(created_at)) * 1440) as avg_minutes
-    FROM orders
-    WHERE status = 'ready' AND updated_at != created_at
-  `).get();
-
-  const ordersByHour = db.prepare(`
-    SELECT strftime('%H', created_at) as hour, COUNT(*) as count
-    FROM orders
-    WHERE status != 'cancelled'
-    GROUP BY hour
-    ORDER BY hour
-  `).all();
-
-  const ordersByDay = db.prepare(`
-    SELECT date(created_at) as day, COUNT(*) as count
-    FROM orders
-    WHERE status != 'cancelled'
-    GROUP BY day
-    ORDER BY day DESC
-    LIMIT 30
-  `).all();
-
-  const totalOrders = db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status != 'cancelled'").get().cnt;
-  const totalStudents = db.prepare("SELECT COUNT(DISTINCT student_da) as cnt FROM orders WHERE status != 'cancelled'").get().cnt;
-
-  res.json({
-    topArticles,
-    avgPrepTimeMinutes: Math.round(avgPrepTime?.avg_minutes || 0),
-    ordersByHour,
-    ordersByDay,
-    totalOrders,
-    totalStudents,
-  });
-});
-
-// Auto-transition "ready" orders to "picked_up" after 30 minutes
+// ── Auto-deliver ready orders after 30 min ──
 setInterval(() => {
-  const expired = db.prepare(
-    "SELECT * FROM orders WHERE status = 'ready' AND (julianday('now') - julianday(updated_at)) * 1440 > 30"
-  ).all();
+  const expired = db.prepare("SELECT * FROM orders WHERE status = 'ready' AND (julianday('now') - julianday(updated_at)) * 1440 > 30").all();
   for (const order of expired) {
     db.prepare("UPDATE orders SET status = 'picked_up', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(order.id);
     broadcastSSE("order-update", { order_number: order.order_number, status: "picked_up", student_da: order.student_da });
     console.log(`Auto-delivered: #${order.order_number} (30min timeout)`);
   }
-}, 60000); // Check every minute
+}, 60000);
 
-// ── Health check ──
-app.get("/api/health", async (req, res) => {
-  const checks = { server: "ok", database: "error", embeddings: "error", uptime: process.uptime() };
-
-  // DB check
-  try {
-    db.prepare("SELECT 1").get();
-    checks.database = "ok";
-    checks.orders = db.prepare("SELECT COUNT(*) as cnt FROM orders").get().cnt;
-    checks.students = db.prepare("SELECT COUNT(*) as cnt FROM students").get().cnt;
-  } catch (e) {
-    checks.databaseError = e.message;
-  }
-
-  // Embedding server check
-  try {
-    const embRes = await fetch(`${EMBEDDING_URL}/health`, { signal: AbortSignal.timeout(3000) });
-    if (embRes.ok) {
-      const data = await embRes.json();
-      checks.embeddings = "ok";
-      checks.embeddingModel = data.model;
-    }
-  } catch (e) {
-    checks.embeddingsError = e.message;
-  }
-
-  checks.inventoryItems = inventoryData.length;
-  checks.embeddingsLoaded = embeddingsData.length;
-  checks.sseClients = sseClients.size;
-
-  const allOk = checks.database === "ok" && checks.embeddings === "ok";
-  res.status(allOk ? 200 : 503).json(checks);
-});
-
-// ── SPA catch-all: serve React index.html for all non-API routes ──
-const spaIndex = path.join(__dirname, "dist", "index.html");
-if (fs.existsSync(spaIndex)) {
-  app.get("*", (req, res) => {
-    res.sendFile(spaIndex);
-  });
-}
-
-app.listen(PORT, () => {
-  console.log(`Serveur démarré: http://localhost:${PORT}`);
-});
+app.listen(PORT, () => { console.log(`Serveur démarré: http://localhost:${PORT}`); });
