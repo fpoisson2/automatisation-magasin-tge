@@ -1004,6 +1004,40 @@ setInterval(() => {
   }
 }, 60000); // Check every minute
 
+// ── Health check ──
+app.get("/api/health", async (req, res) => {
+  const checks = { server: "ok", database: "error", embeddings: "error", uptime: process.uptime() };
+
+  // DB check
+  try {
+    db.prepare("SELECT 1").get();
+    checks.database = "ok";
+    checks.orders = db.prepare("SELECT COUNT(*) as cnt FROM orders").get().cnt;
+    checks.students = db.prepare("SELECT COUNT(*) as cnt FROM students").get().cnt;
+  } catch (e) {
+    checks.databaseError = e.message;
+  }
+
+  // Embedding server check
+  try {
+    const embRes = await fetch(`${EMBEDDING_URL}/health`, { signal: AbortSignal.timeout(3000) });
+    if (embRes.ok) {
+      const data = await embRes.json();
+      checks.embeddings = "ok";
+      checks.embeddingModel = data.model;
+    }
+  } catch (e) {
+    checks.embeddingsError = e.message;
+  }
+
+  checks.inventoryItems = inventoryData.length;
+  checks.embeddingsLoaded = embeddingsData.length;
+  checks.sseClients = sseClients.size;
+
+  const allOk = checks.database === "ok" && checks.embeddings === "ok";
+  res.status(allOk ? 200 : 503).json(checks);
+});
+
 // ── SPA catch-all: serve React index.html for all non-API routes ──
 const spaIndex = path.join(__dirname, "dist", "index.html");
 if (fs.existsSync(spaIndex)) {
