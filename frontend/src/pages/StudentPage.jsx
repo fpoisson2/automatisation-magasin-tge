@@ -42,7 +42,9 @@ export function StudentPage() {
   // DA modal
   const [daInput, setDaInput] = useState("");
   const [nameInput, setNameInput] = useState("");
+  const [daSuggestions, setDaSuggestions] = useState([]);
   const showDAModal = !studentDA || !studentName;
+  const daTimer = useRef(null);
 
   // ── Load frequent articles ──
   useEffect(() => {
@@ -171,11 +173,24 @@ export function StudentPage() {
     localStorage.setItem("dismissedOrders", JSON.stringify(next));
   };
 
-  // ── DA auto-fill ──
-  const handleDABlur = async () => {
-    if (!daInput) return;
-    const student = await api.getStudent(daInput);
-    if (student && !nameInput) setNameInput(student.name);
+  // ── DA auto-fill + autocomplete ──
+  const handleDAInput = (val) => {
+    setDaInput(val);
+    if (daTimer.current) clearTimeout(daTimer.current);
+    if (val.length >= 2) {
+      daTimer.current = setTimeout(async () => {
+        const results = await api.autocompleteDA(val);
+        setDaSuggestions(results || []);
+      }, 200);
+    } else {
+      setDaSuggestions([]);
+    }
+  };
+
+  const selectDA = (da, name) => {
+    setDaInput(da);
+    setNameInput(name);
+    setDaSuggestions([]);
   };
 
   const handleDAConfirm = async () => {
@@ -223,7 +238,20 @@ export function StudentPage() {
         <h2>Magasin TGE</h2>
         <p style={{ color: "var(--color-text-muted)", marginBottom: "1rem", fontSize: "0.85rem" }}>Identifiez-vous pour passer des commandes.</p>
         <label style={{ display: "block", fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "0.2rem" }}>Numéro de DA</label>
-        <input className="input" value={daInput} onChange={(e) => setDaInput(e.target.value)} onBlur={handleDABlur} placeholder="1234567" style={{ marginBottom: "0.85rem" }} autoFocus />
+        <div style={{ position: "relative", marginBottom: "0.85rem" }}>
+          <input className="input" value={daInput} onChange={(e) => handleDAInput(e.target.value)} placeholder="1234567" autoFocus autoComplete="off" />
+          {daSuggestions.length > 0 && (
+            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-md)", zIndex: 10, overflow: "hidden" }}>
+              {daSuggestions.map((s) => (
+                <div key={s.da} onClick={() => selectDA(s.da, s.name)} style={{ padding: "0.5rem 0.75rem", cursor: "pointer", fontSize: "var(--font-size-sm)", borderBottom: "1px solid var(--color-border-light)", display: "flex", justifyContent: "space-between" }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-input-bg)"} onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+                  <span className="mono" style={{ fontWeight: 600 }}>{s.da}</span>
+                  <span style={{ color: "var(--color-text-muted)" }}>{s.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <label style={{ display: "block", fontSize: "0.8rem", color: "var(--color-text-secondary)", marginBottom: "0.2rem" }}>Nom</label>
         <input className="input" value={nameInput} onChange={(e) => setNameInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleDAConfirm()} placeholder="Jean Tremblay" style={{ marginBottom: "0.85rem" }} />
         <div className="btn-row" style={{ justifyContent: "center" }}>

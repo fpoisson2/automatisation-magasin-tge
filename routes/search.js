@@ -77,6 +77,13 @@ module.exports = function ({ searchLimiter, uploadLimiter, hybridSearch, dedupli
   });
 
   // ── Students ──
+  router.get("/api/students/autocomplete", apiLimiter, (req, res) => {
+    const q = (req.query.q || "").trim();
+    if (!q || q.length < 2) return res.json([]);
+    const results = db.prepare("SELECT da, name FROM students WHERE da LIKE ? ORDER BY last_seen DESC LIMIT 5").all(`${q}%`);
+    res.json(results);
+  });
+
   router.get("/api/students/:da", apiLimiter, (req, res) => {
     if (!/^\d{5,9}$/.test(req.params.da)) return res.status(400).json({ error: "DA invalide" });
     const student = db.prepare("SELECT * FROM students WHERE da = ?").get(req.params.da);

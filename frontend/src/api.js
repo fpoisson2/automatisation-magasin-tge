@@ -20,6 +20,7 @@ export const getMe = () => json("/api/admin/me");
 
 // ── Students ──
 export const getStudent = (da) => json(`/api/students/${da}`);
+export const autocompleteDA = (q) => json(`/api/students/autocomplete?q=${encodeURIComponent(q)}`);
 export const saveStudent = (da, name) => post("/api/students", { da, name });
 export const getFrequent = (da) => json(`/api/students/${da}/frequent`);
 
