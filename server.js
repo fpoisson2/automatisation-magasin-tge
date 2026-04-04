@@ -8,6 +8,7 @@ const Database = require("better-sqlite3");
 const rateLimit = require("express-rate-limit");
 const multer = require("multer");
 const bcrypt = require("bcryptjs");
+const compression = require("compression");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,6 +16,7 @@ const PORT = process.env.PORT || 3000;
 // Trust Cloudflare Tunnel proxy
 app.set("trust proxy", 1);
 
+app.use(compression());
 app.use(express.json());
 
 // ── Rate limiters ──
@@ -105,8 +107,8 @@ app.get("/", (req, res) => {
 });
 
 // Serve login.html assets without auth
-app.use(express.static("public", { index: false }));
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use(express.static("public", { index: false, maxAge: "1h" }));
+app.use("/uploads", express.static(path.join(__dirname, "uploads"), { maxAge: "7d" }));
 
 // ── Multer for photo uploads ──
 const upload = multer({
@@ -359,7 +361,22 @@ function deduplicateResults(items, limit = 25) {
       seen.set(desc, { ...item });
     }
   }
-  return [...seen.values()].filter((i) => (parseInt(i["Disponible"]) || 0) > 0).slice(0, limit);
+  const results = [...seen.values()].filter((i) => (parseInt(i["Disponible"]) || 0) > 0).slice(0, limit);
+
+  // Enrich with extras (photo, doc) in one query
+  if (results.length) {
+    const articleNos = results.map((r) => r["No d'article"]);
+    const placeholders = articleNos.map(() => "?").join(",");
+    const extras = db.prepare(`SELECT * FROM item_extras WHERE article_no IN (${placeholders})`).all(...articleNos);
+    const extrasMap = {};
+    for (const e of extras) extrasMap[e.article_no] = e;
+    for (const r of results) {
+      const ex = extrasMap[r["No d'article"]];
+      if (ex) { r._photo = ex.photo_path; r._doc = ex.doc_url; }
+    }
+  }
+
+  return results;
 }
 
 // Get order with items helper
@@ -761,6 +778,16 @@ app.patch("/api/admin/orders/:id", requireAuth, (req, res) => {
 });
 
 // ── Item extras (photo + doc) ──
+app.post("/api/items/extras-batch", (req, res) => {
+  const { articleNos } = req.body;
+  if (!articleNos?.length) return res.json({});
+  const placeholders = articleNos.map(() => "?").join(",");
+  const rows = db.prepare(`SELECT * FROM item_extras WHERE article_no IN (${placeholders})`).all(...articleNos);
+  const map = {};
+  for (const r of rows) map[r.article_no] = r;
+  res.json(map);
+});
+
 app.get("/api/items/:articleNo/extras", (req, res) => {
   const extras = db.prepare("SELECT * FROM item_extras WHERE article_no = ?").get(req.params.articleNo);
   res.json(extras || { article_no: req.params.articleNo, photo_path: null, doc_url: null });

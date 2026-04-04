@@ -296,7 +296,7 @@ function displayResults(items) {
     card.className = "item-card";
     card.dataset.article = articleNo;
     card.innerHTML = `
-      <div class="card-photo-slot"></div>
+      ${item._photo ? `<img class="item-photo" src="${item._photo}" alt="" loading="lazy">` : ""}
       <div class="card-header">
         <div class="article-no">#${articleNo}</div>
         ${dispo > 0 ? `
@@ -312,12 +312,9 @@ function displayResults(items) {
       <div class="meta">
         <span class="${dispo === 0 ? "out-of-stock" : ""}">Dispo: <strong>${dispo}</strong></span>
       </div>
-      <div class="card-doc-slot"></div>
+      ${item._doc ? `<a class="doc-link" href="${item._doc}" target="_blank" rel="noopener">Documentation</a>` : ""}
     `;
     resultsEl.appendChild(card);
-
-    // Load photo + doc async
-    loadItemExtras(articleNo, card);
   });
 
   // Bind quantity controls
@@ -354,20 +351,6 @@ function renderCardQty(ctrl, articleNo) {
     ctrl.innerHTML = `<button class="add-btn">+</button>`;
   }
   renderCart();
-}
-
-async function loadItemExtras(articleNo, card) {
-  try {
-    const res = await fetch(`/api/items/${encodeURIComponent(articleNo)}/extras`);
-    if (!res.ok) return;
-    const extras = await res.json();
-    if (extras.photo_path) {
-      card.querySelector(".card-photo-slot").innerHTML = `<img class="item-photo" src="${extras.photo_path}" alt="" loading="lazy">`;
-    }
-    if (extras.doc_url) {
-      card.querySelector(".card-doc-slot").innerHTML = `<a class="doc-link" href="${extras.doc_url}" target="_blank" rel="noopener">Documentation</a>`;
-    }
-  } catch {}
 }
 
 // ── Cart FAB + modal (mobile) ──
