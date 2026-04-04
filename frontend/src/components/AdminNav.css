@@ -5,7 +5,7 @@
   height: var(--header-height);
   display: flex;
   align-items: center;
-  gap: var(--space-lg);
+  gap: var(--space-md);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -18,16 +18,35 @@
 
 .admin-header .spacer { flex: 1; }
 
-.admin-header a {
+.nav-link {
   color: rgba(255, 255, 255, 0.7);
   text-decoration: none;
   font-size: var(--font-size-sm);
+  position: relative;
+  white-space: nowrap;
 }
 
-.admin-header a:hover { color: #fff; }
-.admin-header a.active { color: #fff; font-weight: 600; }
+.nav-link:hover { color: #fff; }
+.nav-link.active { color: #fff; font-weight: 600; }
 
-.admin-header .nav-logout {
+.nav-badge {
+  position: absolute;
+  top: -8px;
+  right: -10px;
+  background: var(--color-danger);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.nav-btn {
   padding: 0.25rem 0.7rem;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--radius-sm);
@@ -35,9 +54,27 @@
   color: rgba(255, 255, 255, 0.8);
   font-size: 0.75rem;
   cursor: pointer;
+  white-space: nowrap;
 }
 
-.admin-header .nav-logout:hover {
+.nav-btn:hover {
   background: rgba(255, 255, 255, 0.2);
   color: #fff;
+}
+
+.nav-btn.active {
+  border-color: var(--color-success);
+}
+
+.sse-banner {
+  background: var(--color-danger);
+  color: #fff;
+  text-align: center;
+  font-size: var(--font-size-xs);
+  padding: 0.2rem;
+}
+
+@media (max-width: 640px) {
+  .admin-header { padding: 0 var(--space-md); gap: var(--space-sm); }
+  .nav-link { font-size: var(--font-size-xs); }
 }

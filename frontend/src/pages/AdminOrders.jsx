@@ -1,14 +1,13 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { AdminNav } from "../components/AdminNav";
 import { Badge } from "../components/Badge";
-import { useSSE } from "../hooks/useSSE";
+import { useAdminNotifications } from "../hooks/useAdminNotifications";
 import { getAdminOrders, getAdminOrdersAll, updateOrderStatus } from "../api";
 
 export function AdminOrders() {
   const [orders, setOrders] = useState([]);
   const [completed, setCompleted] = useState([]);
-  const [soundEnabled, setSoundEnabled] = useState(false);
-  const audioCtx = useRef(null);
+  const { onOrderEvent, clearPending } = useAdminNotifications();
 
   const fetchAll = async () => {
     const active = await getAdminOrders();
@@ -17,28 +16,11 @@ export function AdminOrders() {
     if (all) setCompleted(all.filter((o) => o.status === "picked_up" || o.status === "cancelled" || o.status === "ready"));
   };
 
-  useEffect(() => { fetchAll(); }, []);
-
-  const connected = useSSE("/api/admin/orders/stream", {
-    "order-new": () => { playSound(); fetchAll(); },
-    "order-update": () => { playSound(); fetchAll(); },
-  });
-
-  const playSound = () => {
-    if (!soundEnabled) return;
-    if (!audioCtx.current) audioCtx.current = new (window.AudioContext || window.webkitAudioContext)();
-    const ctx = audioCtx.current;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = 800;
-    gain.gain.value = 0.3;
-    osc.start();
-    osc.frequency.setValueAtTime(1000, ctx.currentTime + 0.1);
-    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
-    osc.stop(ctx.currentTime + 0.4);
-  };
+  useEffect(() => {
+    fetchAll();
+    clearPending();
+    return onOrderEvent(() => fetchAll());
+  }, []);
 
   const changeStatus = async (id, status) => {
     await updateOrderStatus(id, status);
@@ -54,17 +36,9 @@ export function AdminOrders() {
     document.title = total > 0 ? `(${total}) Commandes` : "Commandes";
   }, [total]);
 
-  const soundBtn = (
-    <button onClick={() => { setSoundEnabled(!soundEnabled); if (!audioCtx.current) audioCtx.current = new (window.AudioContext || window.webkitAudioContext)(); }}
-      className="nav-logout" style={{ borderColor: soundEnabled ? "var(--color-success)" : undefined, color: soundEnabled ? "#4ade80" : undefined }}>
-      Son: {soundEnabled ? "ON" : "OFF"}
-    </button>
-  );
-
   return (
     <>
-      <AdminNav title="Commandes" extra={soundBtn} />
-      {!connected && <div style={{ background: "var(--color-danger)", color: "#fff", textAlign: "center", fontSize: "var(--font-size-xs)", padding: "0.2rem" }}>Connexion perdue...</div>}
+      <AdminNav title="Commandes" />
       <main style={{ maxWidth: 800, margin: "0 auto", padding: "var(--space-xl)" }}>
         <div style={{ display: "flex", gap: "0.5rem", marginBottom: "var(--space-xl)" }}>
           <StatCard num={pending.length} label="En attente" color="#e65100" />
@@ -86,7 +60,7 @@ export function AdminOrders() {
 
         <OrderSection title={`Prêtes (${ready.length})`} orders={ready}
           actions={() => []}
-          badge={(o) => <Badge status="ready" />} />
+          badge={() => <Badge status="ready" />} />
 
         {total === 0 && <p style={{ textAlign: "center", color: "var(--color-text-placeholder)", padding: "2.5rem" }}>Aucune commande en cours</p>}
 
